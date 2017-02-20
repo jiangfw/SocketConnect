@@ -99,7 +99,7 @@ public class SocketManager {
      * 开始建立Socket连接（有线和无线同时监听）
      */
     public void startSocketConnection() {
-        mListenerList.clear();
+//        mListenerList.clear();
         mConnTypeSet.clear();
         isUSBConn = false;
         isWIFIConn = false;
@@ -686,7 +686,7 @@ public class SocketManager {
      * 销毁有线和无线socket连接
      */
     public void stopSocketConnection() {
-        mListenerList.clear();
+//        mListenerList.clear();
         mConnTypeSet.clear();
         isUSBConn = false;
         isWIFIConn = false;
