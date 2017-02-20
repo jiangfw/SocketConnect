@@ -11,18 +11,27 @@ import android.widget.Toast;
 import com.carrobot.android.socketconnect.listener.onSocketStatusListener;
 import com.carrobot.android.socketconnect.socket.SocketManager;
 import com.carrobot.android.socketconnect.utils.Config;
+import com.carrobot.android.socketconnect.utils.FileCache;
+import com.carrobot.android.socketconnect.utils.LogController;
 import com.carrobot.android.socketconnect.utils.Utils;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.util.ArrayList;
+
 
 public class MainActivity extends AppCompatActivity implements onSocketStatusListener {
+
+    private final String TAG = MainActivity.class.getSimpleName();
 
     private TextView id_tv_info;
     private Button id_btn_send_wireless,id_btn_send_wired;
     private TextView id_tv_recevie;
 
+    private Button id_btn_send_file, id_btn_get_version;
 
     private SocketManager mSocketManager;
 
@@ -85,6 +94,51 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
                     e.printStackTrace();
                 }
 
+            }
+        });
+
+        //请求版本号
+        id_btn_get_version = (Button) findViewById(R.id.id_btn_get_version);
+        id_btn_get_version.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String msg = "{\"msg\":\"version\"}";
+                mSocketManager.requestDataByJson(msg);
+            }
+        });
+
+        //发送文件
+        id_btn_send_file = (Button) findViewById(R.id.id_btn_send_file);
+        id_btn_send_file.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String romPath = FileCache.getInstance().getRomPath();
+
+                File fileDirs = new File(romPath);
+
+                if (fileDirs != null) {
+                    String[] array = fileDirs.list();
+                    ArrayList<String> pathLists = new ArrayList<String>();
+                    for (int i = 0; array != null && i < array.length; i++) {
+                        pathLists.add(romPath + "/" + array[i]);
+                        LogController.i(TAG, "file path:" + array[i]);
+                    }
+                    try {
+                        boolean isSucess = mSocketManager.transferFileList(pathLists);
+                        if (isSucess) {
+                            Toast.makeText(MainActivity.this, "start transerfer file sucess.", Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(MainActivity.this, "start transerfer file fail.", Toast.LENGTH_LONG).show();
+                        }
+                    } catch (FileNotFoundException e) {
+                        e.printStackTrace();
+                        Toast.makeText(MainActivity.this, "file path is not exits.", Toast.LENGTH_LONG).show();
+                        LogController.i(TAG, "file path is not exits");
+                    }
+                } else {
+                    Toast.makeText(MainActivity.this, "fileDirs is null.", Toast.LENGTH_LONG).show();
+                    LogController.i(TAG, "fileDirs is null.");
+                }
             }
         });
 

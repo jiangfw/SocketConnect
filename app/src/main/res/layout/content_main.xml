@@ -22,14 +22,15 @@
 
     <LinearLayout
         android:id="@+id/id_ll_send"
-        android:layout_below="@+id/id_tv_info"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/id_tv_info">
+
         <Button
             android:id="@+id/id_btn_send_wireless"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_margin="5dp"
+            android:layout_margin="2dp"
             android:layout_weight="1"
             android:text="发送无线数据" />
 
@@ -37,11 +38,39 @@
             android:id="@+id/id_btn_send_wired"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_margin="5dp"
             android:layout_below="@+id/id_tv_info"
+            android:layout_margin="2dp"
+            android:layout_weight="1"
             android:text="发送有线数据" />
     </LinearLayout>
+
+
+    <LinearLayout
+        android:id="@+id/id_ll_file"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/id_ll_send">
+
+        <Button
+
+            android:id="@+id/id_btn_get_version"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.0"
+            android:layout_below="@+id/id_ll_send"
+            android:layout_margin="2dp"
+            android:text="获取版本号" />
+
+
+        <Button
+            android:id="@+id/id_btn_send_file"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="2dp"
+            android:layout_weight="1"
+            android:text="发送文件数据" />
+    </LinearLayout>
+
 
 
 
@@ -49,7 +78,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_alignParentBottom="true"
-        android:layout_below="@+id/id_ll_send">
+        android:layout_below="@+id/id_ll_file">
 
         <TextView
             android:id="@+id/id_tv_recevie"
