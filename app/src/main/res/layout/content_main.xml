@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/content_main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingBottom="@dimen/activity_vertical_margin"
+    android:paddingLeft="@dimen/activity_horizontal_margin"
+    android:paddingRight="@dimen/activity_horizontal_margin"
+    android:paddingTop="@dimen/activity_vertical_margin"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior"
+    tools:context="com.carrobot.android.socketconnect.MainActivity"
+    tools:showIn="@layout/activity_main">
+
+    <TextView
+        android:id="@+id/id_tv_info"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="udp 广播获取服务端IP地址中..." />
+
+
+    <LinearLayout
+        android:id="@+id/id_ll_send"
+        android:layout_below="@+id/id_tv_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <Button
+            android:id="@+id/id_btn_send_wireless"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="5dp"
+            android:layout_weight="1"
+            android:text="发送无线数据" />
+
+        <Button
+            android:id="@+id/id_btn_send_wired"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_margin="5dp"
+            android:layout_below="@+id/id_tv_info"
+            android:text="发送有线数据" />
+    </LinearLayout>
+
+
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_alignParentBottom="true"
+        android:layout_below="@+id/id_ll_send">
+
+        <TextView
+            android:id="@+id/id_tv_recevie"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:text="建立TCP连接中..." />
+
+    </ScrollView>
+
+</RelativeLayout>
