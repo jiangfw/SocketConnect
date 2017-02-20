@@ -184,6 +184,6 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
         super.onDestroy();
         mSocketManager.stopSocketConnection();
         mSocketManager.removeOnSocketStatusListener(this);
-        //TODO test 2 3
+        //TODO test 2 3 4
     }
 }
