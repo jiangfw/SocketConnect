@@ -45,6 +45,8 @@ public class SocketManager {
     // 无线wifi方式socket通信，使用socket实现收发
     private UDPClient mUDPClient;
     private TCPClient mTCPClient;
+    private Thread mUDPReceiveThread;
+    private Thread mUDPSendThread;
     private boolean isStartUDPBroadcast = true;
 
     // 有线连接方式socket通信，使用serversocket实现收发
@@ -117,12 +119,18 @@ public class SocketManager {
         mUDPClient = new UDPClient(mHandler);
         mUDPClient.setUdpLife(true);
         //建立链接
-        mExecutorService.execute(mUDPClient);
+        if(mUDPReceiveThread!=null)
+            mUDPReceiveThread.interrupt();
+        mUDPReceiveThread =new Thread(mUDPClient);
+        mUDPReceiveThread.start();
         //发送udp广播
         isStartUDPBroadcast = true;
-        mExecutorService.execute(new UdpBroadcastRunnable("{\n" +
+        if(mUDPSendThread!=null)
+            mUDPSendThread.interrupt();
+        mUDPSendThread = new Thread(new UdpBroadcastRunnable("{\n" +
                 "     \"msg\":\"reqConn\"\n" +
                 "     }"));
+        mUDPSendThread.start();
     }
 
     /**
@@ -716,6 +724,17 @@ public class SocketManager {
             mUDPClient.setUdpLife(false);
             mUDPClient = null;
         }
+
+        if(mUDPReceiveThread!=null){
+            mUDPReceiveThread.interrupt();
+            mUDPReceiveThread = null;
+
+        }
+        if(mUDPSendThread!=null){
+            mUDPSendThread.interrupt();
+            mUDPSendThread = null;
+        }
+
         if (mTCPClient != null) {
             mTCPClient.stopConn();
             mTCPClient = null;
