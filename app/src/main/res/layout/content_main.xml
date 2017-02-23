@@ -72,13 +72,20 @@
     </LinearLayout>
 
 
+    <Button
+        android:id="@+id/id_btn_miracast"
+        android:layout_below="@+id/id_ll_file"
+        android:text="开启无线投屏"
+        android:layout_margin="2dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
 
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_alignParentBottom="true"
-        android:layout_below="@+id/id_ll_file">
+        android:layout_below="@+id/id_btn_miracast">
 
         <TextView
             android:id="@+id/id_tv_recevie"

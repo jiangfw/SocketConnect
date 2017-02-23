@@ -1,6 +1,11 @@
 package com.carrobot.android.socketconnect;
 
+import android.content.ActivityNotFoundException;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
@@ -145,6 +150,70 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
         id_tv_info = (TextView) findViewById(R.id.id_tv_info);
         id_tv_recevie = (TextView) findViewById(R.id.id_tv_recevie);
 
+
+        Button id_btn_miracast = (Button) findViewById(R.id.id_btn_miracast);
+        id_btn_miracast.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startWifiDisplayActivity(MainActivity.this);
+            }
+        });
+
+    }
+
+
+    /**
+     * 开启屏幕投射设置
+     * @param context
+     */
+    public static void startWifiDisplayActivity(Context context) {
+
+        System.out.println("brand:"+ Build.BRAND+",board:"+Build.BOARD+",display:"+Build.DISPLAY+",model:"+Build.MODEL);
+        try {
+            Intent intent = new Intent("android.settings.CAST_SETTINGS");
+            if("MX6".equalsIgnoreCase(Build.BOARD))
+                intent = new Intent("android.settings.APP_OPS_SETTINGS");
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            e.printStackTrace();
+            try{
+                Intent intent = new Intent("android.settings.WIFI_DISPLAY_SETTINGS");
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(intent);
+            }catch (ActivityNotFoundException e0){
+                e0.printStackTrace();
+                try {
+                    Intent intent = new Intent("mediatek.settings.WFD_SINK_SETTINGS");
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(intent);
+                }catch (ActivityNotFoundException e1){
+                    e1.printStackTrace();
+
+                    try {
+                        Intent intent = new Intent(Settings.ACTION_SETTINGS);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        context.startActivity(intent);
+                    }catch (ActivityNotFoundException e2){
+                        e2.printStackTrace();
+                    }
+                }
+
+            }
+
+
+        } catch (SecurityException se){
+
+            try {
+                Intent intent = new Intent(Settings.ACTION_SETTINGS);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(intent);
+            }catch (ActivityNotFoundException e2){
+                e2.printStackTrace();
+            }
+
+            se.printStackTrace();
+        }
     }
 
     /**
