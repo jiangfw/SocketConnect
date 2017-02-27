@@ -170,9 +170,8 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
         System.out.println("brand:"+ Build.BRAND+",board:"+Build.BOARD+",display:"+Build.DISPLAY+",model:"+Build.MODEL);
         try {
+            // sdk 6.0 设置中无线投屏的action
             Intent intent = new Intent("android.settings.CAST_SETTINGS");
-            if("MX6".equalsIgnoreCase(Build.BOARD))
-                intent = new Intent("android.settings.APP_OPS_SETTINGS");
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(intent);
         } catch (ActivityNotFoundException e) {
@@ -189,7 +188,6 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
                     context.startActivity(intent);
                 }catch (ActivityNotFoundException e1){
                     e1.printStackTrace();
-
                     try {
                         Intent intent = new Intent(Settings.ACTION_SETTINGS);
                         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -200,10 +198,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
                 }
 
             }
-
-
         } catch (SecurityException se){
-
             try {
                 Intent intent = new Intent(Settings.ACTION_SETTINGS);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -211,7 +206,6 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
             }catch (ActivityNotFoundException e2){
                 e2.printStackTrace();
             }
-
             se.printStackTrace();
         }
     }
