@@ -61,7 +61,6 @@ public class TCPServerService extends Service {
         return START_NOT_STICKY;
     }
 
-
     /**
      * 开启serversockt监听
      */

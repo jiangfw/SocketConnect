@@ -34,10 +34,10 @@ import java.util.ArrayList;
  * Created by fuwei.jiang on 16/12/27.
  */
 
-public class TCPClient {
+public class TCPWifiSocket {
 
 
-    public static String TAG = TCPClient.class.getSimpleName();
+    public static String TAG = TCPWifiSocket.class.getSimpleName();
 
     private HeartBreakTimer heartBreakTimer;//心跳包计时器
     private long lastRecvTimeStamp = 0;//用于判断检测心跳包时间戳
@@ -64,7 +64,7 @@ public class TCPClient {
     private Handler wifiController;
 
 
-    public TCPClient(Context context, String ip, int port) {
+    public TCPWifiSocket(Context context, String ip, int port) {
         this.mServerIP = ip;
         this.mServerPort = port;
 
