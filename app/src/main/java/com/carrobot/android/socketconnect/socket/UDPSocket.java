@@ -23,18 +23,15 @@ import java.util.concurrent.Executors;
 /**
  * Created by fuwei.jiang on 16/12/27.
  */
-public class UDPClient implements Runnable {
+public class UDPSocket implements Runnable {
 
-    private static String TAG = "";
-    private static final int POOL_SIZE = 5; // 单个CPU线程池大小
+    private static String TAG = UDPSocket.class.getSimpleName();
     private static final int BUFFERLENGTH = 1024; // 缓冲大小
-    private static byte[] sendBuffer = new byte[BUFFERLENGTH];
     private static byte[] receiveBuffer = new byte[BUFFERLENGTH];
 
     private ArrayList<DataReceiveListener> mDataReceiveListenerList;
 
 
-    private ExecutorService executor;
     private DatagramSocket mDatagramSocket = null;
     private DatagramPacket mDatagramPacketSend;
     private DatagramPacket mDatagramPacketReceive;
@@ -43,9 +40,7 @@ public class UDPClient implements Runnable {
     private boolean isThreadRunning;
 
 
-    public UDPClient() {
-        int cpuNums = Runtime.getRuntime().availableProcessors();
-        executor = Executors.newFixedThreadPool(cpuNums * POOL_SIZE); // 根据CPU数目初始化线程池
+    public UDPSocket() {
         mDataReceiveListenerList = new ArrayList<DataReceiveListener>();
     }
 
@@ -89,11 +84,7 @@ public class UDPClient implements Runnable {
      * @param dataSendListener
      */
     public void sendUdpData(final String sendMsg, final DataSendListener dataSendListener) {
-        if (executor == null) {
-            int cpuNums = Runtime.getRuntime().availableProcessors();
-            executor = Executors.newFixedThreadPool(cpuNums * POOL_SIZE);
-        }
-        executor.execute(new Runnable() {
+        SocketThreadPool.getSocketThreadPool().execute(new Runnable() {
             @Override
             public void run() {
                 InetAddress hostAddress = null;
@@ -101,7 +92,7 @@ public class UDPClient implements Runnable {
                     Config.UDP_BROADCAST_IP = Utils.getBroadcastAddress();
                     if (Config.UDP_BROADCAST_IP == null) {
                         if (dataSendListener != null) {
-                            dataSendListener.onError();
+                            dataSendListener.onError("broadcast ip address error");
                         }
                         LogController.i(TAG, "broadcast ip address error.");
                     }
@@ -110,7 +101,7 @@ public class UDPClient implements Runnable {
                 } catch (UnknownHostException e) {
                     e.printStackTrace();
                     if (dataSendListener != null) {
-                        dataSendListener.onError();
+                        dataSendListener.onError("unknown host not find address");
                     }
                     LogController.i(TAG, "udp can not find address.");
                 }
@@ -120,14 +111,14 @@ public class UDPClient implements Runnable {
                     if (mDatagramSocket != null) {
                         mDatagramSocket.send(mDatagramPacketSend);
                         if (dataSendListener != null) {
-                            dataSendListener.onSuccess();
+                            dataSendListener.onSuccess(sendMsg);
                             LogController.i(TAG, "upd send to message sucess.");
                         }
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
                     if (dataSendListener != null) {
-                        dataSendListener.onError();
+                        dataSendListener.onError("send msg fail");
                     }
                     LogController.i(TAG, "upd send to message fail.");
                 }
@@ -169,7 +160,8 @@ public class UDPClient implements Runnable {
             LogController.i(TAG, "udp receive messag:" + receiveMsg);
         }
         LogController.i(TAG, "==udp receive message end.==");
-        mDatagramSocket.close();
+        if (mDatagramSocket != null)
+            mDatagramSocket.close();
         mDatagramSocket = null;
     }
 

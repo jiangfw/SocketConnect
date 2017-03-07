@@ -1,6 +1,8 @@
 package com.carrobot.android.socketconnect;
 
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
@@ -13,6 +15,9 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.carrobot.android.socketconnect.listener.DataReceiveListener;
+import com.carrobot.android.socketconnect.listener.DataSendListener;
+import com.carrobot.android.socketconnect.listener.onSocketFileListener;
 import com.carrobot.android.socketconnect.listener.onSocketStatusListener;
 import com.carrobot.android.socketconnect.socket.SocketManager;
 import com.carrobot.android.socketconnect.utils.Config;
@@ -28,12 +33,12 @@ import java.io.FileNotFoundException;
 import java.util.ArrayList;
 
 
-public class MainActivity extends AppCompatActivity implements onSocketStatusListener {
+public class MainActivity extends AppCompatActivity implements onSocketStatusListener, onSocketFileListener, DataReceiveListener {
 
     private final String TAG = MainActivity.class.getSimpleName();
 
     private TextView id_tv_info;
-    private Button id_btn_send_wireless,id_btn_send_wired;
+    private Button id_btn_send_wireless, id_btn_send_wired;
     private TextView id_tv_recevie;
 
     private Button id_btn_send_file, id_btn_get_version;
@@ -46,6 +51,8 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
         setContentView(R.layout.activity_main);
         mSocketManager = SocketManager.getInstance(this);
         mSocketManager.addOnSocketStatusListener(this);
+        mSocketManager.setSocketFileListerner(this);
+        mSocketManager.addDataReceivedListener(this);
         mSocketManager.startSocketConnection();
 
         id_btn_send_wireless = (Button) findViewById(R.id.id_btn_send_wireless);
@@ -54,29 +61,18 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
             @Override
             public void onClick(View v) {
 
-                String str = "send to client message";
-                String type = Config.TCP_TYPE_APP;
-                String hook = Utils.getUdid(MainActivity.this);
+                String msg = "{\"msg\":\"wifi\"}";
+                mSocketManager.requestDataByJson(msg, Config.TCP_CONTECT_WAY_WIFI, new DataSendListener() {
+                    @Override
+                    public void onSuccess(String message) {
 
-                /**
-                 * tcp连接阶段，请求和响应的消息格式：
-                 {
-                 “msg”:”请求类型”,
-                 “hook”:”客户端生成uuid，服务端会将次字符串原文回传，以区分请求和响应”,
-                 ...
-                 }
-                 */
+                    }
 
-                try {
-                    JSONObject jsonObject = new JSONObject();
-                    jsonObject.putOpt("msg",type);
-                    jsonObject.putOpt("hook",hook);
-                    jsonObject.putOpt("resposeMsg",str);
-                    mSocketManager.requestDataByJson(jsonObject.toString(),Config.CONTECT_WAY_WIRELESS);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-
+                    @Override
+                    public void onError(String error) {
+                        Toast.makeText(MainActivity.this,"wifi error:"+error,Toast.LENGTH_SHORT).show();
+                    }
+                });
             }
         });
 
@@ -86,18 +82,18 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
             @Override
             public void onClick(View v) {
 
-                String str = "send to server message";
-                String type = Config.TCP_TYPE_APP;
-                String hook = Utils.getUdid(MainActivity.this);
-                try {
-                    JSONObject jsonObject = new JSONObject();
-                    jsonObject.putOpt("msg",type);
-                    jsonObject.putOpt("hook",hook);
-                    jsonObject.putOpt("resposeMsg",str);
-                    mSocketManager.requestDataByJson(jsonObject.toString(),Config.CONTECT_WAY_USB);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
+                String msg = "{\"msg\":\"usb\"}";
+                mSocketManager.requestDataByJson(msg, Config.TCP_CONTECT_WAY_USB, new DataSendListener() {
+                    @Override
+                    public void onSuccess(String message) {
+
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        Toast.makeText(MainActivity.this,"usb error:"+error,Toast.LENGTH_SHORT).show();
+                    }
+                });
 
             }
         });
@@ -108,7 +104,17 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
             @Override
             public void onClick(View v) {
                 String msg = "{\"msg\":\"version\"}";
-                mSocketManager.requestDataByJson(msg);
+                mSocketManager.requestDataByJson(msg, new DataSendListener() {
+                    @Override
+                    public void onSuccess(String message) {
+
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        Toast.makeText(MainActivity.this,"error:"+error,Toast.LENGTH_SHORT).show();
+                    }
+                });
             }
         });
 
@@ -129,12 +135,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
                         LogController.i(TAG, "file path:" + array[i]);
                     }
                     try {
-                        boolean isSucess = mSocketManager.transferFileList(pathLists);
-                        if (isSucess) {
-                            Toast.makeText(MainActivity.this, "start transerfer file sucess.", Toast.LENGTH_LONG).show();
-                        } else {
-                            Toast.makeText(MainActivity.this, "start transerfer file fail.", Toast.LENGTH_LONG).show();
-                        }
+                        mSocketManager.transferFileList(pathLists);
                     } catch (FileNotFoundException e) {
                         e.printStackTrace();
                         Toast.makeText(MainActivity.this, "file path is not exits.", Toast.LENGTH_LONG).show();
@@ -150,7 +151,6 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
         id_tv_info = (TextView) findViewById(R.id.id_tv_info);
         id_tv_recevie = (TextView) findViewById(R.id.id_tv_recevie);
 
-
         Button id_btn_miracast = (Button) findViewById(R.id.id_btn_miracast);
         id_btn_miracast.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -164,46 +164,47 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
     /**
      * 开启屏幕投射设置
+     *
      * @param context
      */
     public static void startWifiDisplayActivity(Context context) {
 
-        System.out.println("brand:"+ Build.BRAND+",board:"+Build.BOARD+",display:"+Build.DISPLAY+",model:"+Build.MODEL);
+        System.out.println("brand:" + Build.BRAND + ",board:" + Build.BOARD + ",display:" + Build.DISPLAY + ",model:" + Build.MODEL);
         try {
-            // sdk 6.0 设置中无线投屏的action
-            Intent intent = new Intent("android.settings.CAST_SETTINGS");
+            Intent intent = new Intent("android.settings.WIFI_DISPLAY_SETTINGS");
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(intent);
         } catch (ActivityNotFoundException e) {
             e.printStackTrace();
-            try{
-                Intent intent = new Intent("android.settings.WIFI_DISPLAY_SETTINGS");
+            try {
+                // sdk 6.0 设置中无线投屏的action
+                Intent intent = new Intent("android.settings.CAST_SETTINGS");
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 context.startActivity(intent);
-            }catch (ActivityNotFoundException e0){
+            } catch (ActivityNotFoundException e0) {
                 e0.printStackTrace();
                 try {
                     Intent intent = new Intent("mediatek.settings.WFD_SINK_SETTINGS");
                     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     context.startActivity(intent);
-                }catch (ActivityNotFoundException e1){
+                } catch (ActivityNotFoundException e1) {
                     e1.printStackTrace();
                     try {
                         Intent intent = new Intent(Settings.ACTION_SETTINGS);
                         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         context.startActivity(intent);
-                    }catch (ActivityNotFoundException e2){
+                    } catch (ActivityNotFoundException e2) {
                         e2.printStackTrace();
                     }
                 }
 
             }
-        } catch (SecurityException se){
+        } catch (SecurityException se) {
             try {
                 Intent intent = new Intent(Settings.ACTION_SETTINGS);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 context.startActivity(intent);
-            }catch (ActivityNotFoundException e2){
+            } catch (ActivityNotFoundException e2) {
                 e2.printStackTrace();
             }
             se.printStackTrace();
@@ -212,11 +213,12 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
     /**
      * 获取upd广播的IP地址和端口号
+     *
      * @param message
      */
     @Override
     public void onSocketUdpInfo(String message) {
-        Log.i("udpClient","onSocketUdpInfo"+message);
+        Log.i("udpClient", "onSocketUdpInfo" + message);
 
         /**
          * 响应：
@@ -240,67 +242,87 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
             e.printStackTrace();
         }
     }
+
     /**
      * Socket通信与TCP连接建立成功
      */
     @Override
     public void onSocketConnectSucess(String connWay) {
-        Toast.makeText(this,connWay, Toast.LENGTH_LONG).show();
-        id_tv_recevie.setText("建立TCP连接成功..."+"\n");
+        Toast.makeText(this, connWay, Toast.LENGTH_SHORT).show();
+        id_tv_recevie.setText("建立TCP连接成功..." + "\n");
 
     }
+
     /**
      * Socket通信TCP连接建立失败
      */
     @Override
     public void onSocketConnectFail(String message) {
-
-        id_tv_recevie.setText("建立TCP连接中..."+message+"\n");
+        Toast.makeText(this, "onSocketConnectFail msg:" + message, Toast.LENGTH_SHORT).show();
+        id_tv_recevie.setText("建立TCP连接中..." + message + "\n");
     }
+
     /**
      * Socket通信TCP连接断开连接
      */
     @Override
     public void onSocketConnectLost(String connWay) {
 
-        Toast.makeText(this,"onSocketConnectLost:"+connWay, Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "onSocketConnectLost:" + connWay, Toast.LENGTH_SHORT).show();
+        id_tv_recevie.setText("建立TCP连接中..." + "\n");
+    }
 
-//        id_tv_info.setText("udp 广播获取服务端IP地址中...:");
-        id_tv_recevie.setText("建立TCP连接中..."+"\n");
-    }
-    /**
-     * 获取服务端发送的文本信息
-     * @param message
-     */
-    @Override
-    public void onMessageReceive(String message) {
-
-        Log.i("UDPClient","onMessageReceive"+message);
-        id_tv_recevie.setText(id_tv_recevie.getText().toString()+message.toString()+"\n");
-    }
-    /**
-     * TCP发送成功回调
-     */
-    @Override
-    public void onSendSuccess() {
-
-    }
-    /**
-     * TCP发送失败
-     * code ＝ 400 ：socket被回收
-     * code ＝ 401 ：socket断开连接，发送失败
-     * @param code
-     */
-    @Override
-    public void onSendError(int code) {
-        Toast.makeText(this,"未建立TCP连接，请稍后...",Toast.LENGTH_SHORT).show();
-    }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         mSocketManager.stopSocketConnection();
         mSocketManager.removeOnSocketStatusListener(this);
-        //TODO test 2 3 4 5
+    }
+
+    @Override
+    public void onFileTransferSucess(String filePath) {
+
+        LogController.d(TAG, "file transfer sucess,filePath:" + filePath);
+        Toast.makeText(this, "file transfer sucess.", Toast.LENGTH_SHORT).show();
+
+    }
+
+    @Override
+    public void onFileListTransferSucess() {
+        LogController.d(TAG, "all file transfer sucess");
+        Toast.makeText(this, "all file transfer sucess.", Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onFileTransferFail(String filePath, String message) {
+        LogController.d(TAG, "file transfer error:" + message + ",path:" + filePath);
+        Toast.makeText(this, "file transfer error:" + message, Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onRomInstallSucess() {
+
+    }
+
+    @Override
+    public void onRomInstallFail(String error) {
+
+    }
+
+    @Override
+    public void onRomInstalling(String progress) {
+
+    }
+
+    @Override
+    public void onMessageReceived(int type, String message) {
+        LogController.d(TAG, "onMessageReceived,type:" + type + ",message:" + message);
+        id_tv_recevie.setText(id_tv_recevie.getText().toString() + message.toString() + "\n");
+    }
+
+    @Override
+    public void onCommandReceived(int command) {
+
     }
 }

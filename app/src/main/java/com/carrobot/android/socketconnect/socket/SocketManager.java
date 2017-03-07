@@ -5,12 +5,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.Message;
 import android.util.Log;
 
+import com.carrobot.android.socketconnect.listener.DataReceiveListener;
+import com.carrobot.android.socketconnect.listener.DataSendListener;
 import com.carrobot.android.socketconnect.listener.onSocketFileListener;
 import com.carrobot.android.socketconnect.listener.onSocketStatusListener;
 import com.carrobot.android.socketconnect.utils.Config;
@@ -26,8 +26,6 @@ import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Created by fuwei.jiang on 17/1/6.
@@ -39,25 +37,19 @@ public class SocketManager {
 
     private Context mContext;
     private static SocketManager instance;
-    // 线程池
-    private ExecutorService mExecutorService;
-
     // 无线wifi方式socket通信，使用socket实现收发
-    private UDPClient mUDPClient;
-    private TCPClient mTCPClient;
+    private UDPSocket mUDPSocket;
+    private TCPWifiSocket mTCPClient;
     private Thread mUDPReceiveThread;
     private Thread mUDPSendThread;
     private boolean isStartUDPBroadcast = true;
 
     // 有线连接方式socket通信，使用serversocket实现收发
-    private TCPServerService mTCPServerService = null;
+    private TCPUsbSocket mTCPUsbSocket = null;
     private MyServiceConnection myServiceConnection;
 
     // 存储当前有效的连接方式
     private HashSet<String> mConnTypeSet = new HashSet<>();
-
-    // 保存当前mini的版本号
-//    private String mMiniVersion = "";
 
     // 设置当前默认使用的TCP端口号
     private String mPortType = Config.TCP_PORT_FACTORY;
@@ -66,6 +58,8 @@ public class SocketManager {
     private List<onSocketStatusListener> mListenerList = new ArrayList<>();
     // socket文件传输监听
     private onSocketFileListener mOnSocketFileListener = null;
+    // 数据接受监听
+    private List<DataReceiveListener> mDataReceivedListenerList = new ArrayList<DataReceiveListener>();
 
     //start 文件传输使用的变量 start
     private boolean isUSBTransfer = false;
@@ -77,15 +71,11 @@ public class SocketManager {
     private Hashtable<File, Boolean> mHt_FileStatus = new Hashtable<>();
     //end 文件传输使用的变量 end
 
-
-    private HandlerThread socketHandlerThread = new HandlerThread("socket_thread");
-	private Handler socketController;
+    //接口回调更新到主线程处理
+    private Handler mHandler = new Handler(Looper.getMainLooper());
 
     private SocketManager(Context context) {
         this.mContext = context.getApplicationContext();
-        mExecutorService = Executors.newFixedThreadPool(5);
-        socketHandlerThread.start();
-        socketController = new Handler(socketHandlerThread.getLooper());
     }
 
     public static SocketManager getInstance(Context context) {
@@ -101,7 +91,6 @@ public class SocketManager {
      * 开始建立Socket连接（有线和无线同时监听）
      */
     public void startSocketConnection() {
-//        mListenerList.clear();
         mConnTypeSet.clear();
         isUSBConn = false;
         isWIFIConn = false;
@@ -115,17 +104,65 @@ public class SocketManager {
      * 开始建立无线连接
      */
     private void startWifiSocketConnection() {
-        //建立UPD链接，获取萝卜的ip地址和端口号
-        mUDPClient = new UDPClient(mHandler);
-        mUDPClient.setUdpLife(true);
+        //建立UPD链接，获取萝卜的ip地址和端口号,获取成功后直接建立TCP链接
+        mUDPSocket = new UDPSocket();
+        mUDPSocket.addDataReceiverListener(new DataReceiveListener() {
+            @Override
+            public void onMessageReceived(int type, String message) {
+                if (type == Config.TYPE_RECEIVE_UDP) {
+                    //将收到的消息发给主界面
+                    notifySocketUdpInfo(message);
+                    //建立TCP链接
+                    int OBDPort = 8888;
+                    String ip = "";
+                    int factoryPort = 1234;
+
+                    try {
+                        JSONObject jsonObject = new JSONObject(message);
+                        if (jsonObject.has("OBDPort"))
+                            OBDPort = jsonObject.getInt("OBDPort");
+                        if (jsonObject.has("ip"))
+                            ip = jsonObject.getString("ip");
+                        if (jsonObject.has("factoryPort"))
+                            factoryPort = jsonObject.getInt("factoryPort");
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                    if (mTCPClient == null) {
+                        mTCPClient = new TCPWifiSocket();
+                        mTCPClient.addSocketConnStatusListener(new WirelessSocketConnListener());
+                        mTCPClient.addDataReceivedListener(new DataReceiveListener() {
+                            @Override
+                            public void onMessageReceived(int type, final String message) {
+                                notifyMessageReceived(type, message);
+                                LogController.i(TAG, "wifi received msg:" + message);
+                            }
+
+                            @Override
+                            public void onCommandReceived(int command) {
+
+                            }
+                        });
+                        mTCPClient.setSocketFileListerner(new SocketFileStatusListener(Config.TCP_CONTECT_WAY_WIFI));
+                        mTCPClient.connectTcpWifiSocket(ip, factoryPort);
+                    }
+                    //停止UDP的广播请求
+                    isStartUDPBroadcast = false;
+                    LogController.i(TAG, "udp accept server message:" + message);
+                }
+            }
+
+            @Override
+            public void onCommandReceived(int command) {
+
+            }
+        });
         //建立链接
-        if(mUDPReceiveThread!=null)
-            mUDPReceiveThread.interrupt();
-        mUDPReceiveThread =new Thread(mUDPClient);
-        mUDPReceiveThread.start();
+        mUDPSocket.connectUDPSocket();
+
         //发送udp广播
         isStartUDPBroadcast = true;
-        if(mUDPSendThread!=null)
+        if (mUDPSendThread != null)
             mUDPSendThread.interrupt();
         mUDPSendThread = new Thread(new UdpBroadcastRunnable("{\n" +
                 "     \"msg\":\"reqConn\"\n" +
@@ -140,7 +177,7 @@ public class SocketManager {
 
         //建立有线连接的服务,启动service解决端口重新绑定的问题
         myServiceConnection = new MyServiceConnection();
-        mContext.bindService(new Intent(mContext, TCPServerService.class), myServiceConnection, Context.BIND_AUTO_CREATE);
+        mContext.bindService(new Intent(mContext, TCPUsbSocket.class), myServiceConnection, Context.BIND_AUTO_CREATE);
 
     }
 
@@ -148,7 +185,7 @@ public class SocketManager {
      * 实现文件传输监听
      */
     private class SocketFileStatusListener implements onSocketFileListener {
-        private String mConnType = Config.CONTECT_WAY_WIRELESS;
+        private String mConnType = Config.TCP_CONTECT_WAY_WIFI;
 
         private SocketFileStatusListener(String connType) {
             this.mConnType = connType;
@@ -156,16 +193,16 @@ public class SocketManager {
 
         @Override
         public void onFileTransferSucess(String filePath) {
-            File file = new File(filePath);
-            mHt_FileStatus.put(file, true);
-
-            if (mOnSocketFileListener != null) {
-                mOnSocketFileListener.onFileTransferSucess(filePath);
-            }
-            boolean isFinish = continueTransferFile();
-            if (mOnSocketFileListener != null && isFinish) {
-                mOnSocketFileListener.onFileListTransferSucess();
-            }
+//            File file = new File(filePath);
+//            mHt_FileStatus.put(file, true);
+//
+//            if (mOnSocketFileListener != null) {
+//                mOnSocketFileListener.onFileTransferSucess(filePath);
+//            }
+//            boolean isFinish = continueTransferFile();
+//            if (mOnSocketFileListener != null && isFinish) {
+//                mOnSocketFileListener.onFileListTransferSucess();
+//            }
         }
 
         @Override
@@ -175,12 +212,12 @@ public class SocketManager {
 
         @Override
         public void onFileTransferFail(String filePath, String message) {
-            File file = new File(filePath);
-            mHt_FileStatus.put(file, false);
-            if (mOnSocketFileListener != null) {
-                destoryFile();
-                mOnSocketFileListener.onFileTransferFail(filePath, message);
-            }
+//            File file = new File(filePath);
+//            mHt_FileStatus.put(file, false);
+//            if (mOnSocketFileListener != null) {
+//                destoryFile();
+//                mOnSocketFileListener.onFileTransferFail(filePath, message);
+//            }
         }
 
         @Override
@@ -228,72 +265,66 @@ public class SocketManager {
         }
 
         @Override
-        public void onSocketConnectSucess(String connWay) {
-            // 如果wifi已经开始传输了，不进行usb传输
-            isUSBConn = true;
-            mConnTypeSet.add(connWay);
+        public void onSocketConnectSucess(final String connWay) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    // 如果wifi已经开始传输了，不进行usb传输
+                    isUSBConn = true;
+                    mConnTypeSet.add(connWay);
 
-            //连接成功请求版本号
-//            String msg = "{\"msg\":\"version\"}";
-//            requestDataByJson(msg, Config.CONTECT_WAY_USB);
+                    LogController.i(TAG, "UsbSocketConnListener sucess isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
 
-            LogController.i(TAG, "UsbSocketConnListener sucess isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
+                    if (isUSBTransfer) {
+                        continueTransferFile();
+                    }
 
+                    notifySocketConnectSucess(connWay);
+                }
+            });
 
-            if (isUSBTransfer) {
-                continueTransferFile();
-            }
-
-            notifySocketConnectSucess(connWay);
         }
 
         @Override
-        public void onSocketConnectFail(String message) {
-            isUSBConn = false;
-            isUSBTransfer = false;
-            isRomInstalling = false;
-            mConnTypeSet.remove(Config.CONTECT_WAY_USB);
-            // usb如果断开了，检测wifi是否连接成功且是否在wifi传输
-            LogController.i(TAG, "UsbSocketConnListener fail isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
+        public void onSocketConnectFail(final String message) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    isUSBConn = false;
+                    isUSBTransfer = false;
+                    isRomInstalling = false;
+                    mConnTypeSet.remove(Config.TCP_CONTECT_WAY_USB);
+                    // usb如果断开了，检测wifi是否连接成功且是否在wifi传输
+                    LogController.i(TAG, "UsbSocketConnListener fail isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
 
-            if (!isWIFITransfer) {
-                continueTransferFile();
-            }
+                    if (!isWIFITransfer) {
+                        continueTransferFile();
+                    }
 
-            notifySocketConnectFail(message);
+                    notifySocketConnectFail(message);
+                }
+            });
         }
 
         @Override
-        public void onSocketConnectLost(String connWay) {
-            isUSBConn = false;
-            isUSBTransfer = false;
-            isRomInstalling = false;
-            mConnTypeSet.remove(connWay);
+        public void onSocketConnectLost(final String connWay) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    isUSBConn = false;
+                    isUSBTransfer = false;
+                    isRomInstalling = false;
+                    mConnTypeSet.remove(connWay);
+                    // usb如果断开了，检测wifi是否连接成功且是否在wifi传输
+                    if (!isWIFITransfer) {
+                        continueTransferFile();
+                    }
+                    notifySocketConnectLost(connWay);
 
-            LogController.i(TAG, "UsbSocketConnListener lost isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
+                    LogController.i(TAG, "UsbSocketConnListener lost isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
 
-            // usb如果断开了，检测wifi是否连接成功且是否在wifi传输
-            if (!isWIFITransfer) {
-                continueTransferFile();
-            }
-            notifySocketConnectLost(connWay);
-        }
-
-        @Override
-        public void onMessageReceive(String message) {
-            notifyMessageReceived(message);
-            // 每次连接成功重置版本号
-//            parseMiniRomVersion(message);
-        }
-
-        @Override
-        public void onSendSuccess() {
-            notifySendSucess();
-        }
-
-        @Override
-        public void onSendError(int code) {
-
+                }
+            });
         }
     }
 
@@ -307,82 +338,67 @@ public class SocketManager {
         }
 
         @Override
-        public void onSocketConnectSucess(String connWay) {
-            isWIFIConn = true;
-            mConnTypeSet.add(connWay);
-
-            //连接成功请求版本号
-//            String msg = "{\"msg\":\"version\"}";
-//            requestDataByJson(msg, Config.CONTECT_WAY_WIRELESS);
-
-            LogController.i(TAG, "WirelessSocketConnListener sucess isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
-
-
-            if (isWIFITransfer) {
-                continueTransferFile();
-            }
-
-            notifySocketConnectSucess(connWay);
+        public void onSocketConnectSucess(final String connWay) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    isWIFIConn = true;
+                    mConnTypeSet.add(connWay);
+                    if (isWIFITransfer) {
+                        continueTransferFile();
+                    }
+                    notifySocketConnectSucess(connWay);
+                    LogController.i(TAG, "WirelessSocketConnListener sucess isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
+                }
+            });
         }
 
         @Override
-        public void onSocketConnectFail(String message) {
-            isWIFIConn = false;
-            isWIFITransfer = false;
-            isRomInstalling = false;
-            mConnTypeSet.remove(Config.CONTECT_WAY_WIRELESS);
-            LogController.i(TAG, "WirelessSocketConnListener fail isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
+        public void onSocketConnectFail(final String message) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    isWIFIConn = false;
+                    isWIFITransfer = false;
+                    isRomInstalling = false;
+                    mConnTypeSet.remove(Config.TCP_CONTECT_WAY_WIFI);
+                    // 若如果usb已经建立连接，使用usb开始传输文件
+                    if (!isUSBTransfer) {
+                        continueTransferFile();
+                    }
+                    notifySocketConnectFail(message);
+                    //重新开始UDP的广播请求
+                    stopWifiSocketConnection();
+                    // 重新广播获取服务端的ip地址
+                    startWifiSocketConnection();
+                    LogController.i(TAG, "WirelessSocketConnListener fail isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
 
-            // 若如果usb已经建立连接，使用usb开始传输文件
-            if (!isUSBTransfer) {
-                continueTransferFile();
-            }
-            notifySocketConnectFail(message);
-            //重新开始UDP的广播请求
-            stopWifiSocketConnection();
-            // 重新广播获取服务端的ip地址
-            startWifiSocketConnection();
+                }
+            });
         }
 
         @Override
-        public void onSocketConnectLost(String connWay) {
-            isWIFIConn = false;
-            isWIFITransfer = false;
-            isRomInstalling = false;
-            mConnTypeSet.remove(connWay);
-            LogController.i(TAG, "WirelessSocketConnListener lost isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
+        public void onSocketConnectLost(final String connWay) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    isWIFIConn = false;
+                    isWIFITransfer = false;
+                    isRomInstalling = false;
+                    mConnTypeSet.remove(connWay);
+                    // 若如果usb已经建立连接，使用usb开始传输文件
+                    if (!isUSBTransfer) {
+                        continueTransferFile();
+                    }
+                    notifySocketConnectLost(connWay);
+                    //重新开始UDP的广播请求
+                    stopWifiSocketConnection();
+                    // 重新广播获取服务端的ip地址
+                    startWifiSocketConnection();
+                    LogController.i(TAG, "WirelessSocketConnListener lost isUSBTransfer:" + isUSBTransfer + ",isWIFITransfer:" + isWIFITransfer);
 
-            // 若如果usb已经建立连接，使用usb开始传输文件
-            if (!isUSBTransfer) {
-                continueTransferFile();
-            }
-
-            notifySocketConnectLost(connWay);
-            //重新开始UDP的广播请求
-            stopWifiSocketConnection();
-            // 重新广播获取服务端的ip地址
-            startWifiSocketConnection();
-        }
-
-        @Override
-        public void onMessageReceive(String message) {
-            notifyMessageReceived(message);
-            // 每次连接成功重置版本号
-//            parseMiniRomVersion(message);
-        }
-
-        @Override
-        public void onSendSuccess() {
-            notifySendSucess();
-        }
-
-        @Override
-        public void onSendError(int code) {
-            notifySendError(code);
-            //重新开始UDP的广播请求
-            stopWifiSocketConnection();
-            // 重新广播获取服务端的ip地址
-            startWifiSocketConnection();
+                }
+            });
         }
     }
 
@@ -397,14 +413,26 @@ public class SocketManager {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
 
-            TCPServerService.LocalBinder binder = (TCPServerService.LocalBinder) service;
+            TCPUsbSocket.LocalBinder binder = (TCPUsbSocket.LocalBinder) service;
 
-            TCPServerService serverService = (TCPServerService) binder.getService();
-            mTCPServerService = serverService;
+            TCPUsbSocket serverService = (TCPUsbSocket) binder.getService();
+            mTCPUsbSocket = serverService;
 
             serverService.addSocketConnStatusListener(new UsbSocketConnListener(Config.TCP_SERVER_SOCKET_PORT));
-            serverService.setSocketFileListerner(new SocketFileStatusListener(Config.CONTECT_WAY_USB));
-            serverService.executeServerSocket();
+            serverService.setSocketFileListerner(new SocketFileStatusListener(Config.TCP_CONTECT_WAY_USB));
+            serverService.addDataReceivedListener(new DataReceiveListener() {
+                @Override
+                public void onMessageReceived(int type, String message) {
+                    notifyMessageReceived(type, message);
+                    LogController.i(TAG, "usb received msg:" + message);
+                }
+
+                @Override
+                public void onCommandReceived(int command) {
+
+                }
+            });
+            serverService.connectTcpUsbSocket();
         }
 
         @Override
@@ -427,7 +455,6 @@ public class SocketManager {
                 type = typeIterator.next();
                 break;
             }
-
         }
         LogController.i(TAG, "request conntype:" + type);
         return type;
@@ -440,25 +467,8 @@ public class SocketManager {
      * @param message
      * @return true 请求成功 false 请求失败
      */
-    public void requestDataByJson(final String message) {
-        if(socketController!=null)
-        socketController.post(new Runnable() {
-            @Override
-            public void run() {
-                String type = getConnType();
-                if (Config.CONTECT_WAY_WIRELESS.equals(type)) {
-                    if (mTCPClient != null) {
-                         mTCPClient.sendTcpMsg(message, Config.TCP_TYPE_APP);
-                    }
-                } else if (Config.CONTECT_WAY_USB.equals(type)) {
-                    if (mTCPServerService != null) {
-                        mTCPServerService.sendServerSocketMessage(message, Config.TCP_TYPE_APP);
-                    }
-                }
-                LogController.i(TAG,"thread:"+ Thread.currentThread().getName());
-
-            }
-        });
+    public void requestDataByJson(String message, DataSendListener listener) {
+        requestDataByJson(message, getConnType(), listener);
     }
 
 
@@ -479,26 +489,98 @@ public class SocketManager {
      * @param type    有线还是无线连接方式
      * @return true 请求成功 false 请求失败
      */
-    public void requestDataByJson(final String message, final String type) {
-        if(socketController!=null)
-            socketController.post(new Runnable() {
-            @Override
-            public void run() {
-                if (Config.CONTECT_WAY_WIRELESS.equals(type)) {
-                    if (mTCPClient != null) {
-                        mTCPClient.sendTcpMsg(message, Config.TCP_TYPE_APP);
-                    }
-                } else if (Config.CONTECT_WAY_USB.equals(type)) {
-                    if (mTCPServerService != null) {
-                        mTCPServerService.sendServerSocketMessage(message, Config.TCP_TYPE_APP);
-                    }
-                }
+    public void requestDataByJson(final String message, final String type, final DataSendListener listener) {
 
-                LogController.i(TAG,"thread:"+ Thread.currentThread().getName());
+        if (Config.TCP_CONTECT_WAY_WIFI.equals(type)) {
+            if (mTCPClient != null) {
+                mTCPClient.sendTcpData(message, new DataSendListener() {
+
+                    @Override
+                    public void onSuccess(final String message) {
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (listener != null)
+                                    listener.onSuccess(message);
+                            }
+                        });
+
+                        LogController.i(TAG, "wifi json send sucess,thread:" + Thread.currentThread().getName());
+                    }
+
+                    @Override
+                    public void onError(final String error) {
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (listener != null)
+                                    listener.onError(error);
+                            }
+                        });
+                        LogController.i(TAG, "wifi json send fail,thread:" + Thread.currentThread().getName());
+                    }
+
+                });
+            } else {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (listener != null)
+                            listener.onError("disconnect wifi tcp socket.");
+                    }
+                });
             }
-        });
-    }
+        } else if (Config.TCP_CONTECT_WAY_USB.equals(type)) {
+            if (mTCPUsbSocket != null) {
+                mTCPUsbSocket.sendTcpData(message, new DataSendListener() {
+                    @Override
+                    public void onSuccess(final String message) {
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (listener != null)
+                                    listener.onSuccess(message);
+                            }
+                        });
 
+                        LogController.i(TAG, "usb json send sucess,thread:" + Thread.currentThread().getName());
+
+                    }
+
+                    @Override
+                    public void onError(final String error) {
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (listener != null)
+                                    listener.onError(error);
+                            }
+                        });
+                        LogController.i(TAG, "usb json send fail,thread:" + Thread.currentThread().getName());
+
+                    }
+                });
+            } else {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (listener != null)
+                            listener.onError("disconnect usb tcp socket.");
+                    }
+                });
+            }
+        }else{
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (listener != null)
+                        listener.onError("disconnect wifi or usb tcp socket.");
+                }
+            });
+        }
+
+        LogController.i(TAG, "request data by json,thread:" + Thread.currentThread().getName());
+    }
 
 
     /**
@@ -599,38 +681,93 @@ public class SocketManager {
     private void transferFile(final File file, final boolean isFirstFile, final boolean isLastFile) {
         // 1.如果有线和无线同时连接，使用有线传输
         // 2.如果仅有一种连接方式，使用当前的连接方式传输，且不主动断开
-//        boolean ret = true;
+        if (isUSBTransfer) {
+            if (mTCPUsbSocket != null) {
+                mTCPUsbSocket.sendTcpFileData(file, isFirstFile, isLastFile, new DataSendListener() {
+                    @Override
+                    public void onSuccess(String message) {
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                mHt_FileStatus.put(file, true);
+                                boolean isFinish = continueTransferFile();
+                                if (mOnSocketFileListener != null) {
+                                    mOnSocketFileListener.onFileTransferSucess(file.getPath());
+                                }
+                                if (mOnSocketFileListener != null && isFinish) {
+                                    mOnSocketFileListener.onFileListTransferSucess();
+                                }
+                                LogController.i(TAG, "usb send file sucess.file:" + file.getName());
+                            }
+                        });
 
-        socketController.post(new Runnable() {
-            @Override
-            public void run() {
-                if (isUSBTransfer) {
-                    if (!(mTCPServerService != null && mTCPServerService.transferFile(file, isFirstFile, isLastFile))) {
-                        //如果发送失败，通知上层
-                        if (mOnSocketFileListener != null) {
-                            mOnSocketFileListener.onFileTransferFail(file.getPath(), "failed");
-                        }
-//                ret = false;
                     }
-                } else if (isWIFITransfer) {
-                    if (!(mTCPClient != null && mTCPClient.transferFile(file, isFirstFile, isLastFile))) {
-                        //如果发送失败，通知上层
-                        if (mOnSocketFileListener != null) {
-                            mOnSocketFileListener.onFileTransferFail(file.getPath(), "failed");
-                        }
-//                ret = false;
+
+                    @Override
+                    public void onError(String error) {
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                //如果发送失败，通知上层
+                                mHt_FileStatus.put(file, false);
+                                destoryFile();
+                                if (mOnSocketFileListener != null) {
+                                    mOnSocketFileListener.onFileTransferFail(file.getPath(), "failed");
+                                }
+                                LogController.i(TAG, "usb send file failed.file:" + file.getName());
+                            }
+                        });
                     }
-                } else {
-                    //如果发送失败，通知上层
-                    if (mOnSocketFileListener != null) {
-                        mOnSocketFileListener.onFileTransferFail(file.getPath(), "failed");
-                    }
-//            ret = false;
-                }
-//        return ret;
+                });
             }
-        });
+        } else if (isWIFITransfer) {
+            if (mTCPClient != null) {
+                mTCPClient.sendTcpFileData(file, isFirstFile, isLastFile, new DataSendListener() {
+                    @Override
+                    public void onSuccess(String message) {
+                        // 文件发送成功，检测所有的文件是否都上传成功
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                mHt_FileStatus.put(file, true);
+                                boolean isFinish = continueTransferFile();
+                                if (mOnSocketFileListener != null) {
+                                    mOnSocketFileListener.onFileTransferSucess(file.getPath());
+                                }
+                                if (mOnSocketFileListener != null && isFinish) {
+                                    mOnSocketFileListener.onFileListTransferSucess();
+                                }
+                                LogController.i(TAG, "wifi send file sucess.file:" + file.getName());
 
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                //如果发送失败，通知上层
+                                mHt_FileStatus.put(file, false);
+                                destoryFile();
+                                if (mOnSocketFileListener != null) {
+                                    mOnSocketFileListener.onFileTransferFail(file.getPath(), "failed");
+                                }
+                                LogController.i(TAG, "wifi send file failed.file:" + file.getName());
+                            }
+                        });
+                    }
+                });
+
+
+            }
+        } else {
+            //如果发送失败，通知上层
+            if (mOnSocketFileListener != null) {
+                mOnSocketFileListener.onFileTransferFail(file.getPath(), "failed");
+            }
+        }
     }
 
 
@@ -679,13 +816,6 @@ public class SocketManager {
                 return false;
             }
         }
-
-        //如何当前rom正在安装中和手机断开连接,提示上层
-//        if (mOnSocketFileListener != null && isRomInstalling) {
-//            isUSBTransfer = false;
-//            isWIFITransfer = false;
-//            mOnSocketFileListener.onFileTransferFail("", "disconnect");
-//        }
         return true;
     }
 
@@ -694,7 +824,6 @@ public class SocketManager {
      * 销毁有线和无线socket连接
      */
     public void stopSocketConnection() {
-//        mListenerList.clear();
         mConnTypeSet.clear();
         isUSBConn = false;
         isWIFIConn = false;
@@ -710,8 +839,6 @@ public class SocketManager {
         mFileLists.clear();
         isUSBTransfer = false;
         isWIFITransfer = false;
-//        isUSBConn = false;
-//        isWIFIConn = false;
         isRomInstalling = false;
     }
 
@@ -719,24 +846,24 @@ public class SocketManager {
      * 销毁无线socket连接
      */
     private void stopWifiSocketConnection() {
-        if (mUDPClient != null) {
+        if (mUDPSocket != null) {
             isStartUDPBroadcast = false;
-            mUDPClient.setUdpLife(false);
-            mUDPClient = null;
+            mUDPSocket.disconnectUDPSocket();
+            mUDPSocket = null;
         }
 
-        if(mUDPReceiveThread!=null){
+        if (mUDPReceiveThread != null) {
             mUDPReceiveThread.interrupt();
             mUDPReceiveThread = null;
 
         }
-        if(mUDPSendThread!=null){
+        if (mUDPSendThread != null) {
             mUDPSendThread.interrupt();
             mUDPSendThread = null;
         }
 
         if (mTCPClient != null) {
-            mTCPClient.stopConn();
+            mTCPClient.disconnectTcpWifiSocket();
             mTCPClient = null;
         }
     }
@@ -745,10 +872,10 @@ public class SocketManager {
      * 销毁有线socket连接
      */
     private void stopUsbSocketConnection() {
-        if (mTCPServerService != null) {
-            mTCPServerService.close();
+        if (mTCPUsbSocket != null) {
+            mTCPUsbSocket.disconnectTcpUsbSocket();
             mContext.unbindService(myServiceConnection);
-            mTCPServerService = null;
+            mTCPUsbSocket = null;
         }
     }
 
@@ -774,8 +901,19 @@ public class SocketManager {
         @Override
         public void run() {
             while (isStartUDPBroadcast) {
-                mUDPClient.sendUdpData(mRequestUdpMsg);
-//                LogController.i(TAG, "udp send to server message:" + mRequestUdpMsg);
+                mUDPSocket.sendUdpData(mRequestUdpMsg, new DataSendListener() {
+
+                    @Override
+                    public void onSuccess(String message) {
+
+                    }
+
+                    @Override
+                    public void onError(String error) {
+
+                    }
+
+                });
                 try {
                     Thread.sleep(2000);
                 } catch (InterruptedException e) {
@@ -784,56 +922,6 @@ public class SocketManager {
             }
         }
     }
-
-    /**
-     * 更新到主线程更新UI
-     */
-    private Handler mHandler = new Handler(Looper.getMainLooper()) {
-        @Override
-        public void handleMessage(Message msg) {
-            super.handleMessage(msg);
-            switch (msg.what) {
-                // 接受udp发送的ip地址和端口号,并建立TCP链接
-                case 0:
-                    String addressAndPort = (String) msg.obj;
-                    notifySocketUdpInfo(addressAndPort);
-                    LogController.i(TAG, "udp accept server message:" + addressAndPort);
-                    int OBDPort = 8888;
-                    String ip = "";
-                    int factoryPort = 1234;
-
-                    try {
-                        JSONObject jsonObject = new JSONObject(addressAndPort);
-                        if (jsonObject.has("OBDPort"))
-                            OBDPort = jsonObject.getInt("OBDPort");
-                        if (jsonObject.has("ip"))
-                            ip = jsonObject.getString("ip");
-                        if (jsonObject.has("factoryPort"))
-                            factoryPort = jsonObject.getInt("factoryPort");
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                    if (mTCPClient == null) {
-                        if (Config.TCP_PORT_FACTORY.equals(mPortType)) {
-                            mTCPClient = new TCPClient(mContext, ip, factoryPort);
-                        } else if (Config.TCP_PORT_OBD.equals(mPortType)) {
-                            mTCPClient = new TCPClient(mContext, ip, factoryPort);
-                        }
-                        mTCPClient.addSocketConnStatusListener(new WirelessSocketConnListener());
-                        mTCPClient.setSocketFileListerner(new SocketFileStatusListener(Config.CONTECT_WAY_WIRELESS));
-                    }
-
-                    mTCPClient.executeServerSocket();
-//                    mExecutorService.execute(mTCPClient);
-                    //停止UDP的广播请求
-                    isStartUDPBroadcast = false;
-                    break;
-                default:
-                    break;
-            }
-        }
-    };
-
 
     public void setSocketFileListerner(onSocketFileListener listener) {
         this.mOnSocketFileListener = listener;
@@ -848,47 +936,69 @@ public class SocketManager {
         mListenerList.remove(listener);
     }
 
-    private void notifySendSucess() {
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSendSuccess();
-        }
+
+    public void addDataReceivedListener(DataReceiveListener listener) {
+        mDataReceivedListenerList.clear();
+        mDataReceivedListenerList.add(listener);
     }
 
-    private void notifySendError(int error) {
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSendError(error);
-        }
+    public void removeDataReceivedListener(DataReceiveListener listener) {
+        mDataReceivedListenerList.remove(listener);
     }
 
-    private void notifySocketConnectSucess(String connWay) {
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSocketConnectSucess(connWay);
-        }
+    private void notifySocketConnectSucess(final String connWay) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < mListenerList.size(); i++) {
+                    mListenerList.get(i).onSocketConnectSucess(connWay);
+                }
+            }
+        });
     }
 
-    private void notifySocketConnectFail(String message) {
-
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSocketConnectFail(message);
-        }
+    private void notifySocketConnectFail(final String message) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < mListenerList.size(); i++) {
+                    mListenerList.get(i).onSocketConnectFail(message);
+                }
+            }
+        });
     }
 
-    private void notifySocketConnectLost(String connWay) {
-
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSocketConnectLost(connWay);
-        }
+    private void notifySocketConnectLost(final String connWay) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < mListenerList.size(); i++) {
+                    mListenerList.get(i).onSocketConnectLost(connWay);
+                }
+            }
+        });
     }
 
-    private void notifyMessageReceived(String msg) {
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onMessageReceive(msg);
-        }
+    private void notifyMessageReceived(final int type, final String msg) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < mDataReceivedListenerList.size(); i++) {
+                    mDataReceivedListenerList.get(i).onMessageReceived(type, msg);
+                }
+            }
+        });
     }
 
-    private void notifySocketUdpInfo(String msg) {
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSocketUdpInfo(msg);
-        }
+    private void notifySocketUdpInfo(final String msg) {
+
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < mListenerList.size(); i++) {
+                    mListenerList.get(i).onSocketUdpInfo(msg);
+                }
+            }
+        });
     }
 }

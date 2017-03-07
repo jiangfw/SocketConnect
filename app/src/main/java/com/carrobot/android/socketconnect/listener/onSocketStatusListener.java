@@ -14,9 +14,4 @@ public interface onSocketStatusListener {
 
     void onSocketConnectLost(String connWay);
 
-    void onMessageReceive(String message);
-
-    void onSendSuccess();
-
-    void onSendError(int code);
 }

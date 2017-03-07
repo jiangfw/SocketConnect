@@ -5,4 +5,8 @@ package com.carrobot.android.socketconnect.listener;
  */
 
 public interface DataReceiveListener {
+
+    void onMessageReceived(int type,String message);
+
+    void onCommandReceived(int command);
 }

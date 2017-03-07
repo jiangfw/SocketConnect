@@ -5,9 +5,8 @@ package com.carrobot.android.socketconnect.listener;
  */
 
 public interface DataSendListener {
-    void onSuccess();
 
-    void onError();
+    void onSuccess(String message);
 
-    void onProgress(int progress);
+    void onError(String error);
 }

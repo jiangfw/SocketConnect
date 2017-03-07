@@ -18,29 +18,23 @@ import java.util.List;
 
 public class Utils {
 
+    private static final String TAG = Utils.class.getSimpleName();
 
     /**
-     * 获取设备唯一ID，用来添加通信hook
-     * */
-    public static String getUdid(Context context){
-        String deviceID = ((TelephonyManager) context
-                .getSystemService(Context.TELEPHONY_SERVICE))
-                .getDeviceId();
-        return deviceID;
-    }
-
-
-    public static String getBroadcastAddress(){
+     * @return 优先获取无线投屏的网卡地址
+     */
+    public static String getBroadcastAddress() {
         String broadcast = getBroadcastAddress("p2p");
-        if(broadcast == null){
+        if (broadcast == null) {
             return getBroadcastAddress("wlan0");
         }
         return broadcast;
     }
 
     /**
-     * 获取P2P的广播地址
-     * */
+     * @param netCardName 网卡名称
+     * @return 获取的广播地址
+     */
     public static String getBroadcastAddress(String netCardName) {
         try {
 
@@ -50,7 +44,7 @@ public class Utils {
 
                 NetworkInterface networkCard = eni.nextElement();
 
-                if(networkCard.getDisplayName().startsWith(netCardName)){
+                if (networkCard.getDisplayName().startsWith(netCardName)) {
                     List<InterfaceAddress> ncAddrList = networkCard
                             .getInterfaceAddresses();
                     Iterator<InterfaceAddress> ncAddrIterator = ncAddrList.iterator();
@@ -68,15 +62,15 @@ public class Utils {
                                 String subnetAddress = calcSubnetAddress(hostAddress, maskAddress);
                                 String broadcastAddress = networkCardAddress.getBroadcast().getHostAddress();
 
-                                LogController.i("UDPClient",netCardName+" subnetmask =  "+ maskAddress);
-                                LogController.i("UDPClient",netCardName+" subnet     =  "+ subnetAddress);
-                                LogController.i("UDPClient",netCardName+" broadcast  =  "+ broadcastAddress+"\n");
+                                LogController.i(TAG, netCardName + " subnetmask =  " + maskAddress);
+                                LogController.i(TAG, netCardName + " subnet     =  " + subnetAddress);
+                                LogController.i(TAG, netCardName + " broadcast  =  " + broadcastAddress + "\n");
 
-                                return  broadcastAddress;
+                                return broadcastAddress;
                             }
                         } else {
                             String loopback = networkCardAddress.getAddress().getHostAddress();
-                            LogController.i("UDPClient","loopback addr  =   " + loopback +"\n");
+                            LogController.i(TAG, "loopback addr  =   " + loopback + "\n");
 
                         }
                     }
@@ -140,6 +134,7 @@ public class Utils {
 
     /**
      * 用来判断服务是否运行.
+     *
      * @param context
      * @param className 判断的服务名字
      * @return true 在运行 false 不在运行
@@ -150,18 +145,18 @@ public class Utils {
                 context.getSystemService(Context.ACTIVITY_SERVICE);
         List<ActivityManager.RunningServiceInfo> serviceList
                 = activityManager.getRunningServices(3000);
-        if (!(serviceList.size()>0)) {
+        if (!(serviceList.size() > 0)) {
             return false;
         }
-        for (int i=0; i<serviceList.size(); i++) {
-            LogController.i("Utils","className:"+serviceList.get(i).service.getClassName());
+        for (int i = 0; i < serviceList.size(); i++) {
+            LogController.i("Utils", "className:" + serviceList.get(i).service.getClassName());
 
             if (serviceList.get(i).service.getClassName().equals(className) == true) {
                 isRunning = true;
                 break;
             }
         }
-        LogController.i("Utils","className:"+className+",isRunning:"+isRunning);
+        LogController.i("Utils", "className:" + className + ",isRunning:" + isRunning);
         return isRunning;
     }
 }

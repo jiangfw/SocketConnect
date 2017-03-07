@@ -10,6 +10,8 @@ import android.os.Looper;
 import android.os.Message;
 import android.util.Base64;
 
+import com.carrobot.android.socketconnect.listener.DataReceiveListener;
+import com.carrobot.android.socketconnect.listener.DataSendListener;
 import com.carrobot.android.socketconnect.listener.onSocketFileListener;
 import com.carrobot.android.socketconnect.listener.onSocketStatusListener;
 import com.carrobot.android.socketconnect.utils.Config;
@@ -32,14 +34,15 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Created by fuwei.jiang on 17/1/7.
  */
 
-public class TCPServerService extends Service {
+public class TCPUsbSocket extends Service implements Runnable {
 
-    public static String TAG = TCPServerService.class.getSimpleName();
+    public static String TAG = TCPUsbSocket.class.getSimpleName();
 
     private HeartBreakTimer heartBreakTimer;//心跳包计时器
     private long lastRecvTimeStamp = 0;//用于判断检测心跳包时间戳
@@ -48,10 +51,14 @@ public class TCPServerService extends Service {
     private ArrayList<onSocketStatusListener> mListenerList = new ArrayList<onSocketStatusListener>();
     private onSocketFileListener mOnSocketFileListener;
 
-    private Thread mThread = null;
+    private ArrayList<DataReceiveListener> mDataReceiveListenerList = new ArrayList<DataReceiveListener>();
 
 
-    private Socket mSocket = null;
+    private Thread receiveTcpUsbThread = null;
+
+    private List<Socket> mSocketLists = new ArrayList<Socket>();
+
+    //    private Socket mSocket = null;
     private boolean isDestroy = false;
 
 
@@ -61,204 +68,132 @@ public class TCPServerService extends Service {
         return START_NOT_STICKY;
     }
 
-    /**
-     * 开启serversockt监听
-     */
-    public void executeServerSocket() {
-        if (mThread != null)
-            mThread.interrupt();
-        mThread = new Thread(new Runnable() {
 
-            @Override
-            public void run() {
-                try {
-                    if (serverSocket == null) {
-                        serverSocket = new ServerSocket();
-                        serverSocket.setReuseAddress(true);
-                        serverSocket.bind(new InetSocketAddress(Config.TCP_SERVER_SOCKET_PORT));
-                    }
-
-                    Socket socket = null;
-                    while (true) {
-                        if (isDestroy)
-                            break;
-                        socket = serverSocket.accept();
-
-                        try {
-                            if (mSocket != null && !mSocket.isClosed()) {
-                                mSocket.close();
-                                mSocket = null;
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            LogController.i(TAG, "e1:" + e.toString());
-                        }
-
-                        mSocket = socket;
-                        new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true).println("{\"msg\":\"version\"}");
-                        new Thread(new TCPServerCommunicationThread(socket)).start();
-                        mHandler.sendEmptyMessage(3);
-
-                        // 开启心跳包检测服务
-
-                        if (heartBreakTimer != null)
-                            heartBreakTimer.exit();
-                        heartBreakTimer = new HeartBreakTimer();
-                        heartBreakTimer.start(-1, Config.HEARTBREAK_TIME);
-
-                        LogController.i(TAG, "start timer");
-
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    Message msg = new Message();
-                    msg.what = 4;
-                    msg.obj = e.toString();
-                    mHandler.sendMessage(msg);
-                    LogController.i(TAG, "e2:" + e.toString());
-
-
-                } finally {
-                    if (serverSocket != null) {
-                        try {
-                            serverSocket.close();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                            LogController.i(TAG, "e3:" + e.toString());
-                        }
-                    }
-                }
-            }
-        });
-        mThread.start();
+    public void connectTcpUsbSocket() {
+        //1.开启serversocket监听
+        startConn();
+        //2.启动接受消息的线程
+        startTCPUsbSocketThread();
     }
 
-    private Handler mHandler = new Handler(Looper.getMainLooper()) {
-        @Override
-        public void handleMessage(Message msg) {
-            super.handleMessage(msg);
-            if (msg == null)
-                return;
-            switch (msg.what) {
-                case 0: {
-                    String str = (String) msg.obj;
+    public void disconnectTcpUsbSocket() {
+        //1.关闭serversocket监听
+        stopConn();
+        //2.关闭接受消息的线程
+        stopTCPUsbSocketThread();
+    }
 
-                    String type = "";
+    /**
+     * 开启server端监听
+     */
+    private void startConn() {
+        try {
+            if (serverSocket == null) {
+                serverSocket = new ServerSocket();
+                serverSocket.setReuseAddress(true);
+                serverSocket.bind(new InetSocketAddress(Config.TCP_SERVER_SOCKET_PORT));
+            }
+            LogController.i(TAG, "startConn() 开始建立USB的TCP链接成功.");
+        } catch (IOException e) {
+            e.printStackTrace();
+            LogController.i(TAG, "startConn() 开始建立USB的TCP链接失败.");
+        }
+    }
 
-                    try {
-                        JSONObject jsonObject = new JSONObject(str);
-                        if (jsonObject.has("msg"))
-                            type = jsonObject.getString("msg");
-
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                    if (!"pong".equalsIgnoreCase(type))
-                        notifyMessageReceived(str);
-                    LogController.i(TAG, "usb tcp accept client message：" + str);
-                    break;
+    /**
+     * 关闭socket链接
+     */
+    public void stopConn() {
+        //断开serversocket链接
+        if (serverSocket != null) {
+            if (!serverSocket.isClosed()) {
+                try {
+                    serverSocket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
-                case 1: {
-                    notifySendSucess();
-                    LogController.i(TAG, "usb tcp send to sucess," + "socket connect counts：");
-                    break;
-                }
-                case 2: {
-                    Bundle bundle = msg.getData();
-                    if (bundle != null) {
-                        String type = bundle.getString("type");
-                        int error = bundle.getInt("error");
-                        if (!Config.TCP_TYPE_HEART.equalsIgnoreCase(type)) ;
-                        notifySendError(error);
-                        LogController.i(TAG, "usb tcp send to fail, errocode:" + msg.obj);
-                    }
-                    break;
-                }
-                case 3: {
-                    notifySocketConnectSucess(Config.CONTECT_WAY_USB);
-                    LogController.i(TAG, "usb tcp build sucess.");
-                    break;
-                }
-                case 4: {
-                    notifySocketConnectFail((String) msg.obj);
-                    LogController.i(TAG, "usb tcp fail ex:" + msg.obj);
-                    break;
-                }
-                case 5: {
-                    if (heartBreakTimer != null) {
-                        heartBreakTimer.exit();
-                    }
-                    notifySocketConnectLost(Config.CONTECT_WAY_USB);
-                    LogController.i(TAG, "usb check heart time ,socket connect lost");
-                    break;
-                }
-                case 7: {
-                    break;
-                }
-
-                case Config.MAIN_MSG_WHAT_FILE_INSTALL_SUCESS: {
-                    if (mOnSocketFileListener != null) {
-                        mOnSocketFileListener.onRomInstallSucess();
-                    }
-
-                    mTransferFile = null;
-                    LogController.i(TAG, "usb file install sucess!");
-                    break;
-                }
-                case Config.MAIN_MSG_WHAT_FILE_INSTALL_FAIL: {
-                    if (mOnSocketFileListener != null) {
-                        mOnSocketFileListener.onRomInstallFail((String) msg.obj);
-                    }
-                    mTransferFile = null;
-                    LogController.i(TAG, "usb file install fail! ex:" + msg.obj);
-                    break;
-                }
-                case Config.MAIN_MSG_WHAT_FILE_TRANSFER_SUCESS: {
-                    if (mOnSocketFileListener != null) {
-                        String path = "";
-                        if (mTransferFile != null)
-                            path = mTransferFile.getPath();
-                        mOnSocketFileListener.onFileTransferSucess(path);
-                    }
-                    LogController.i(TAG, "usb file transfer sucess!");
-
-                    break;
-                }
-                case Config.MAIN_MSG_WHAT_FILE_TRANSFER_FAIL: {
-                    if (mOnSocketFileListener != null) {
-                        String path = "";
-                        if (mTransferFile != null)
-                            path = mTransferFile.getPath();
-                        mOnSocketFileListener.onFileTransferFail(path, (String) msg.obj);
-                    }
-                    isAllowRequestMsgByJson = true;
-
-                    LogController.i(TAG, "usb file transfer fail! ex:" + msg.obj);
-                    break;
-                }
-
-                case Config.MAIN_MSG_WHAT_FILE_INSTALLING: {
-                    if (mOnSocketFileListener != null) {
-                        mOnSocketFileListener.onRomInstalling((String) msg.obj);
-                    }
-                    LogController.i(TAG, "usb file installing...");
-                    break;
-                }
-                default:
-                    break;
-
+                serverSocket = null;
             }
         }
-    };
+        //断开socket链接
+        for (Socket socket : mSocketLists) {
+            if (socket != null) {
+                try {
+                    if (!socket.isClosed())
+                        socket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                socket = null;
+            }
+        }
+        mSocketLists.clear();
+        LogController.i(TAG, "stopConn() 关闭USB的tcp链接成功.");
+    }
+
+
+    /**
+     * 开始监听线程
+     **/
+    private void startTCPUsbSocketThread() {
+        if (receiveTcpUsbThread == null) {
+            receiveTcpUsbThread = new Thread(this);
+            receiveTcpUsbThread.start();
+            LogController.i(TAG, "startTCPUsbSocketThread() 线程启动成功.");
+        }
+    }
+
+    /**
+     * 暂停监听线程
+     **/
+    private void stopTCPUsbSocketThread() {
+        if (receiveTcpUsbThread != null)
+            receiveTcpUsbThread.interrupt();
+        receiveTcpUsbThread = null;
+        LogController.i(TAG, "stopTCPUsbSocketThread() 线程停止成功.");
+    }
+
 
     private final IBinder mBinder = new LocalBinder();
+
+    @Override
+    public void run() {
+        try {
+            Socket socket = null;
+            while (true) {
+                if (isDestroy)
+                    break;
+                socket = serverSocket.accept();
+                mSocketLists.add(socket);
+                //握手通信
+                new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true).println("{\"msg\":\"version\"}");
+                //建立通信线程
+                new Thread(new TCPServerCommunicationThread(socket)).start();
+                //通知上层
+                notifySocketConnectSucess(Config.TCP_CONTECT_WAY_USB);
+                // 开启心跳包检测服务
+                if (heartBreakTimer != null)
+                    heartBreakTimer.exit();
+                heartBreakTimer = new HeartBreakTimer();
+                heartBreakTimer.start(-1, Config.HEARTBREAK_TIME);
+
+                LogController.i(TAG, "accept tcp socket:" + socket);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            notifySocketConnectFail(e.getMessage());
+            LogController.i(TAG, "e2:" + e.toString());
+        } finally {
+            stopConn();
+        }
+    }
 
 
     public class LocalBinder extends Binder {
 
-        TCPServerService getService() {
+        TCPUsbSocket getService() {
 
-            return TCPServerService.this;
+            return TCPUsbSocket.this;
 
         }
 
@@ -293,201 +228,15 @@ public class TCPServerService extends Service {
             }
         }
 
-        private long mTransferFileTime = 0L;
-
-
         @Override
         public void run() {
             try {
                 String line = null;
                 while ((line = this.bufferedReader.readLine()) != null) {
-
+                    // 用于检测心跳包
                     lastRecvTimeStamp = System.currentTimeMillis();
-
-                    LogController.i(TAG, "usb read sucess, line:" + line + ",file:" + mTransferFile);
-                    try {
-                        JSONObject jsonObject = new JSONObject(line);
-                        String msg = jsonObject.optString("msg");
-                        String data = jsonObject.optString("data");
-                        try {
-                            // 开始传送文件
-                            if ("upgrade".equalsIgnoreCase(msg)) {
-                                //开始下载升级包 {“msg”:”sof”, “name”:”filename”, “len”:filelength}
-                                JSONObject sofObject = new JSONObject();
-                                if ("ready".equalsIgnoreCase(data)) {
-                                    sofObject.put("msg", "sof");
-                                    if (mTransferFile != null)
-                                        sofObject.put("name", mTransferFile.getName());
-                                    mTransferFileTime = System.currentTimeMillis();
-                                    printWriter.println(sofObject.toString());
-                                } else if ("success".equalsIgnoreCase(data)) {
-                                    //校验成功
-                                    mHandler.sendEmptyMessage(Config.MAIN_MSG_WHAT_FILE_INSTALL_SUCESS);
-                                } else if ("md5error".equalsIgnoreCase(data)) {
-                                    //md5error
-                                    mHandler.sendMessage(mHandler.obtainMessage(Config.MAIN_MSG_WHAT_FILE_INSTALL_FAIL, data));
-                                } else if ("failed".equalsIgnoreCase(data)) {
-                                    //升级失败
-                                    mHandler.sendMessage(mHandler.obtainMessage(Config.MAIN_MSG_WHAT_FILE_INSTALL_FAIL, data));
-                                } else if ("installing".equalsIgnoreCase(data)) {
-                                    //正在安装中
-                                    String progress = jsonObject.optString("process");
-                                    mHandler.sendMessage(mHandler.obtainMessage(Config.MAIN_MSG_WHAT_FILE_INSTALLING, progress));
-                                } else if ("install not started".equalsIgnoreCase(data)) {
-
-                                } else {
-                                    JSONObject eof = new JSONObject();
-                                    eof.put("msg", "eof");
-
-                                    if (mTransferFile != null) {
-                                        eof.put("name", mTransferFile.getName());
-                                        eof.put("len", mTransferFile.length());
-                                    }
-
-                                    LogController.i(TAG, "usb write again msg:" + eof.toString());
-                                    printWriter.println(eof.toString());
-                                    //结束后重新上传
-                                    transferFile(mTransferFile, false, isFinishTransfer);
-                                }
-                                LogController.i(TAG, "usb write msg:" + sofObject.toString() + ",isFinishTransfer:" + isFinishTransfer);
-
-                            } else if ("sof".equalsIgnoreCase(msg) && mTransferFile != null) {
-                                //传输数据 {“msg”:”downloading”, “offset”:1234, “payload”:5678, “data”:[……二进制数据........]}
-                                byte[] buffer = new byte[Config.FILE_MAX_SIZE];
-                                RandomAccessFile fileOutStream = new RandomAccessFile(mTransferFile, "r");
-                                fileOutStream.seek(0);
-                                int len = fileOutStream.read(buffer);
-                                //重置上传二进制流的起始位置
-                                int offset = 0;
-                                int payload = len;
-                                JSONObject downloadJson = new JSONObject();
-                                downloadJson.put("msg", "downloading");
-                                downloadJson.put("offset", offset);
-                                downloadJson.put("payload", payload);
-                                if (Config.ENCODE_BASE64) {
-
-                                    String str = new String(Base64.encode(buffer, 0, len, Base64.DEFAULT));
-                                    str = str.replaceAll("\n", "");
-                                    downloadJson.put("data", str);
-                                } else {
-                                    JSONArray array = new JSONArray();
-                                    for (int i = 0; i < len; i++) {
-                                        array.put(buffer[i]);
-                                    }
-                                    downloadJson.put("data", array);
-                                }
-                                printWriter.println(downloadJson.toString());
-                                LogController.i(TAG, "usb write sof start fileSize:" + mTransferFile.length() + "\n msg:" + downloadJson.toString());
-                            } else if ("downloading".equalsIgnoreCase(msg) && mTransferFile != null) {
-                                //传输数据 {“msg”:”downloading”, “offset”:1234, “payload”:5678, “data”:[……二进制数据........]}
-                                int offset = jsonObject.optInt("offset");
-                                int payload = jsonObject.optInt("payload");
-                                JSONObject downloadJson = new JSONObject();
-                                byte[] buffer = new byte[Config.FILE_MAX_SIZE];
-                                RandomAccessFile fileOutStream = null;
-                                fileOutStream = new RandomAccessFile(mTransferFile, "r");
-                                int len = -1;
-                                if ("ok".equalsIgnoreCase(data)) {
-                                    //重置上传二进制流的起始位置
-                                    offset = offset + payload;
-                                    fileOutStream.seek(offset);
-                                    len = fileOutStream.read(buffer);
-                                    payload = len;
-                                    downloadJson.put("msg", "downloading");
-                                    downloadJson.put("offset", offset);
-                                    downloadJson.put("payload", payload);
-                                    if (Config.ENCODE_BASE64) {
-                                        String str = new String(Base64.encode(buffer, 0, len, Base64.DEFAULT));
-                                        str = str.replaceAll("\n", "");
-                                        downloadJson.put("data", str);
-                                    } else {
-                                        JSONArray array = new JSONArray();
-                                        for (int i = 0; i < len; i++) {
-                                            array.put(buffer[i]);
-                                        }
-                                        downloadJson.put("data", array);
-                                    }
-                                } else if ("error".equalsIgnoreCase(data)) {
-                                    //重新上传刚才没有上传成功的数据
-                                    fileOutStream.seek(offset);
-                                    len = fileOutStream.read(buffer);
-                                    payload = len;
-                                    downloadJson.put("msg", "downloading");
-                                    downloadJson.put("offset", offset);
-                                    downloadJson.put("payload", payload);
-                                    if (Config.ENCODE_BASE64) {
-                                        String str = new String(Base64.encode(buffer, 0, len, Base64.DEFAULT));
-                                        str = str.replaceAll("\n", "");
-                                        downloadJson.put("data", str);
-                                    } else {
-                                        JSONArray array = new JSONArray();
-                                        for (int i = 0; i < len; i++) {
-                                            array.put(buffer[i]);
-                                        }
-                                        downloadJson.put("data", array);
-                                    }
-                                    LogController.i(TAG, "usb write downloading again msg:" + downloadJson.toString());
-
-                                } else {
-                                    // 如果服务端未返回有效的字段，则关闭之前的并重新上传
-                                    JSONObject eof = new JSONObject();
-                                    eof.put("msg", "eof");
-                                    if (mTransferFile != null) {
-                                        eof.put("name", mTransferFile.getName());
-                                        eof.put("len", mTransferFile.length());
-                                    }
-                                    printWriter.println(eof.toString());
-                                    LogController.i(TAG, "usb write downloading again msg:" + eof.toString());
-                                    //结束后重新上传
-                                    transferFile(mTransferFile, false, isFinishTransfer);
-                                    return;
-                                }
-                                if (len > 0) {
-                                    printWriter.println(downloadJson.toString());
-                                } else {
-                                    //升级包传输完成 {“msg”:”eof”, “name”:”filename”}
-                                    JSONObject eof = new JSONObject();
-                                    eof.put("msg", "eof");
-                                    if (mTransferFile != null) {
-                                        eof.put("name", mTransferFile.getName());
-                                        eof.put("len", mTransferFile.length());
-                                    }
-                                    printWriter.println(eof.toString());
-                                    LogController.i(TAG, "usb write msg:" + eof.toString() + "/n alltime:" + (System.currentTimeMillis() - mTransferFileTime));
-                                }
-                            } else if ("eof".equalsIgnoreCase(msg)) {
-                                // 升级包传输完成
-                                if ("ok".equalsIgnoreCase(data)) {
-                                    //如果当前文件是最后一个文件，则通知服务端升级包全部传输完成
-                                    if (isFinishTransfer) {
-                                        //升级包更新完成 通知 {“msg”:”upgrade”, “data”:”end”}
-                                        JSONObject sofObject = new JSONObject();
-                                        sofObject.put("msg", "upgrade");
-                                        sofObject.put("data", "end");
-                                        printWriter.println(sofObject.toString());
-                                        LogController.i(TAG, "usb write msg:" + sofObject.toString());
-                                        isAllowRequestMsgByJson = true;
-                                    }
-                                    LogController.i(TAG, "usb transfer isFinishTransfer:" + isFinishTransfer);
-                                    mHandler.sendEmptyMessage(Config.MAIN_MSG_WHAT_FILE_TRANSFER_SUCESS);
-                                } else if ("error".equalsIgnoreCase(data)) {
-                                    // 就重传文件,交给上层处理
-//                                      transferFile(uploadFile);
-                                    mHandler.sendMessage(mHandler.obtainMessage(Config.MAIN_MSG_WHAT_FILE_TRANSFER_FAIL, data));
-                                }
-                            } else {
-                                mHandler.sendMessage(mHandler.obtainMessage(0, line));
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            mHandler.sendMessage(mHandler.obtainMessage(Config.MAIN_MSG_WHAT_FILE_TRANSFER_FAIL, e.toString()));
-                            LogController.i(TAG, "usb file ex:" + e.toString());
-                        }
-
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                        LogController.i(TAG, "usb read json error:" + e.toString());
-                    }
+                    // 处理返回的消息
+                    handleReceivedMessage(line,mTransferFile,mFileSendListener);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -495,85 +244,291 @@ public class TCPServerService extends Service {
             }
 
         }
+
+        /**
+         * 处理收到的消息
+         *
+         * @param receiveMsg
+         * @param file
+         * @param listener
+         */
+        private void handleReceivedMessage(String receiveMsg, File file, DataSendListener listener) {
+
+            try {
+                String fileName = (file == null) ? "" : file.getName();
+                LogController.i(TAG, "usb read sucess, line:" + receiveMsg + "\n" + fileName);
+                JSONObject jsonObject = new JSONObject(receiveMsg);
+                String msg = jsonObject.optString("msg");
+                String data = jsonObject.optString("data");
+                try {
+                    // 开始传送文件
+                    if ("upgrade".equalsIgnoreCase(msg)) {
+                        //开始上传升级包 {“msg”:”sof”, “name”:”filename”}
+                        JSONObject sofObject = new JSONObject();
+                        if ("ready".equalsIgnoreCase(data) || "upgrade already started".equalsIgnoreCase(data)) {
+                            sofObject.put("msg", "sof");
+                            sofObject.put("name", fileName);
+                            if (file != null)
+                                sofObject.put("len", file.length());
+                            printWriter.println(sofObject.toString());
+                            LogController.i(TAG, "usb write file start msg:" + sofObject.toString());
+                        } else if ("success".equalsIgnoreCase(data)) {
+                            //校验成功
+                            if (mOnSocketFileListener != null)
+                                mOnSocketFileListener.onRomInstallSucess();
+                        } else if ("installing".equalsIgnoreCase(data)) {
+                            String progress = jsonObject.optString("process");
+                            if (mOnSocketFileListener != null)
+                                mOnSocketFileListener.onRomInstalling(progress);
+                        } else {
+                            // md5error,failed...
+                            if (mOnSocketFileListener != null)
+                                mOnSocketFileListener.onRomInstallFail(data);
+                        }
+                    } else if ("sof".equalsIgnoreCase(msg) && file != null) {
+                        //传输数据 {“msg”:”downloading”, “offset”:1234, “payload”:5678, “data”:[……二进制数据........]}
+                        byte[] buffer = new byte[Config.FILE_MAX_SIZE];
+                        RandomAccessFile fileOutStream = new RandomAccessFile(file, "r");
+                        fileOutStream.seek(0);
+                        int len = fileOutStream.read(buffer);
+                        //重置上传二进制流的起始位置
+                        int offset = 0;
+                        int payload = len;
+
+                        JSONObject downloadJson = new JSONObject();
+                        downloadJson.put("msg", "downloading");
+                        downloadJson.put("offset", offset);
+                        downloadJson.put("payload", payload);
+                        if (Config.ENCODE_BASE64) {
+                            String str = new String(Base64.encode(buffer, 0, len, Base64.DEFAULT));
+                            str = str.replaceAll("\n", "");
+                            downloadJson.put("data", str);
+                        } else {
+                            JSONArray array = new JSONArray();
+                            for (int i = 0; i < len; i++) {
+                                array.put(buffer[i]);
+                            }
+                            downloadJson.put("data", array);
+                        }
+                        printWriter.println(downloadJson.toString());
+                    } else if ("downloading".equalsIgnoreCase(msg) && file != null) {
+                        //传输数据 {“msg”:”downloading”, “offset”:1234, “payload”:5678, “data”:[……二进制数据........]}
+                        int offset = jsonObject.optInt("offset");
+                        int payload = jsonObject.optInt("payload");
+
+                        JSONObject downloadJson = new JSONObject();
+                        byte[] buffer = new byte[Config.FILE_MAX_SIZE];
+                        RandomAccessFile fileOutStream = new RandomAccessFile(file, "r");
+                        int len = -1;
+
+                        if ("ok".equalsIgnoreCase(data)) {
+                            //重置上传二进制流的起始位置
+                            offset = offset + payload;
+                            fileOutStream.seek(offset);
+                            len = fileOutStream.read(buffer);
+                            payload = len;
+                            downloadJson.put("msg", "downloading");
+                            downloadJson.put("offset", offset);
+                            downloadJson.put("payload", payload);
+                            if (Config.ENCODE_BASE64) {
+                                String str = new String(Base64.encode(buffer, 0, len, Base64.DEFAULT));
+                                str = str.replaceAll("\n", "");
+                                downloadJson.put("data", str);
+                            } else {
+                                JSONArray array = new JSONArray();
+                                for (int i = 0; i < len; i++) {
+                                    array.put(buffer[i]);
+                                }
+                                downloadJson.put("data", array);
+                            }
+                        } else if ("error".equalsIgnoreCase(data)) {
+                            //重新上传刚才的上传的数据
+                            fileOutStream.seek(offset);
+                            len = fileOutStream.read(buffer);
+                            payload = len;
+                            downloadJson.put("msg", "downloading");
+                            downloadJson.put("offset", offset);
+                            downloadJson.put("payload", payload);
+                            if (Config.ENCODE_BASE64) {
+                                String str = new String(Base64.encode(buffer, 0, len, Base64.DEFAULT));
+                                str = str.replaceAll("\n", "");
+                                downloadJson.put("data", str);
+                            } else {
+                                JSONArray array = new JSONArray();
+                                for (int i = 0; i < len; i++) {
+                                    array.put(buffer[i]);
+                                }
+                                downloadJson.put("data", array);
+                            }
+                        } else {
+                            // 如果服务端未返回有效的字段，则关闭之前的并重新上传
+                            JSONObject eof = new JSONObject();
+                            eof.put("msg", "eof");
+                            eof.put("name", fileName);
+                            if (file != null) {
+                                eof.put("len", file.length());
+                            }
+                            printWriter.println(eof.toString());
+                            LogController.i(TAG, "usb write file downloading failed msg:" + eof.toString());
+                            //结束后重新上传
+                            sendTcpFileData(file, false, isFinishTransfer, listener);
+                            return;
+                        }
+                        if (len > 0) {
+                            printWriter.println(downloadJson.toString());
+                        } else {
+                            //升级包传输完成 {“msg”:”eof”, “name”:”filename”}
+                            JSONObject eof = new JSONObject();
+                            eof.put("msg", "eof");
+                            eof.put("name", fileName);
+                            if (file != null) {
+                                eof.put("len", file.length());
+                            }
+                            printWriter.println(eof.toString());
+                            LogController.i(TAG, "usb write file msg:" + eof.toString());
+                        }
+                    } else if ("eof".equalsIgnoreCase(msg)) {
+                        String filePath = (file == null) ? "" : file.getPath();
+                        // 升级包传输完成
+                        if ("ok".equalsIgnoreCase(data)) {
+                            if (listener != null)
+                                listener.onSuccess(filePath);
+                            //如果当前文件是最后一个文件，则通知服务端升级包全部传输完成
+                            if (isFinishTransfer) {
+                                //升级包更新完成 通知 {“msg”:”upgrade”, “data”:”end”}
+                                JSONObject sofObject = new JSONObject();
+                                sofObject.put("msg", "upgrade");
+                                sofObject.put("data", "end");
+                                printWriter.println(sofObject.toString());
+                                isAllowRequestMsgByJson = true;
+                                LogController.i(TAG, "usb write upgrade end msg:" + sofObject.toString());
+                            }
+                            LogController.i(TAG, "usb wirte file msg sucess! isFinishTransfer:" + isFinishTransfer);
+                        } else if ("error".equalsIgnoreCase(data)) {
+                            // 通知上层文件传输失败
+                            if (listener != null)
+                                listener.onError(filePath);
+                            isAllowRequestMsgByJson = true;
+                        }
+                    } else {
+                        notifyMessageReceived(receiveMsg);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    // 通知上层文件传输失败
+                    String filePath = (file == null) ? "" : file.getPath();
+                    if (listener != null)
+                        listener.onError(filePath);
+                    isAllowRequestMsgByJson = true;
+                    LogController.i(TAG, "usb file ex:" + e.toString());
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+                LogController.i(TAG, "usb read json error:" + e.toString());
+            }
+
+        }
     }
 
     private File mTransferFile = null;
     private boolean isFinishTransfer = false;
+    private DataSendListener mFileSendListener;
 
 
     private volatile boolean isAllowRequestMsgByJson = true;
 
-    public boolean transferFile(File file, boolean isStart, boolean isFinish) {
+    /**
+     * 发送文件
+     * @param file
+     * @param isStart
+     * @param isFinish
+     * @param listener
+     */
+    public void sendTcpFileData(final File file, final boolean isStart, final boolean isFinish, final DataSendListener listener) {
         //1.通知开始升级 {“msg”:”upgrade”, “data”:”start"}
-        if (file == null)
-            return false;
-        this.mTransferFile = file;
-        this.isFinishTransfer = isFinish;
-        if (mSocket == null) {
-            LogController.i(TAG, "usb file upgrade socket is null!");
-            return false;
-        }
-        JSONObject jsonObject = new JSONObject();
-        try {
-            isAllowRequestMsgByJson = false;
-            PrintWriter pw = new PrintWriter(new BufferedWriter(new OutputStreamWriter(mSocket.getOutputStream())), true);
-            if (isStart) {
-                jsonObject.put("msg", "upgrade");
-                jsonObject.put("data", "start");
-            } else {
-                jsonObject.put("msg", "sof");
-                jsonObject.put("name", file.getName());
+        SocketThreadPool.getSocketThreadPool().post(new Runnable() {
+            @Override
+            public void run() {
+                TCPUsbSocket.this.mTransferFile = file;
+                TCPUsbSocket.this.isFinishTransfer = isFinish;
+                TCPUsbSocket.this.mFileSendListener = listener;
+                isAllowRequestMsgByJson = false;
+                for (Socket socket : mSocketLists) {
+                    JSONObject jsonObject = new JSONObject();
+                    try {
+                        PrintWriter pw = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+                        if (isStart) {
+                            jsonObject.put("msg", "upgrade");
+                            jsonObject.put("data", "start");
+                        } else {
+                            jsonObject.put("msg", "sof");
+                            jsonObject.put("name", file.getName());
+                        }
+                        pw.println(jsonObject.toString());
+                        LogController.i(TAG, "usb file upgrade start :" + jsonObject.toString());
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        if (listener != null)
+                            listener.onError("usb file upgrade start error.");
+                        LogController.i(TAG, "usb file upgrade start error! ex:" + e.toString());
+                    }
+                }
             }
+        });
 
-            pw.println(jsonObject.toString());
-            LogController.i(TAG, "usb file upgrade start :" + jsonObject.toString());
-            return true;
-        } catch (Exception e) {
-            e.printStackTrace();
-            LogController.i(TAG, "usb file upgrade start error! ex:" + e.toString());
-        }
-
-
-        return false;
     }
 
 
-    public boolean sendServerSocketMessage(String json, String type) {
-        if (!isAllowRequestMsgByJson) {
-            return false;
-        }
-        PrintWriter pw = null;
-        if (mSocket != null) {
-            {
-                try {
-                    pw = new PrintWriter(new PrintWriter(new BufferedWriter(new OutputStreamWriter(mSocket.getOutputStream())), true));
-                    pw.println(json);
-                    pw.flush();
-                    mHandler.sendMessage(mHandler.obtainMessage(1, type));
-                    return true;
-                } catch (Exception e) {
-                    LogController.i(TAG, "es1:" + e.toString());
+    /**
+     * 发送文本消息
+     * @param json
+     * @param listener
+     */
+    public void sendTcpData(final String json, final DataSendListener listener) {
 
-                    try {
-                        mSocket.close();
-                    } catch (IOException e1) {
-                        e1.printStackTrace();
-                        LogController.i(TAG, "es2:" + e1.toString());
-
+        SocketThreadPool.getSocketThreadPool().post(new Runnable() {
+            @Override
+            public void run() {
+                if (!isAllowRequestMsgByJson) {
+                    if (listener != null) {
+                        listener.onError("usb file transfering...");
                     }
-                    e.printStackTrace();
+                    LogController.i(TAG, "usb file transfering:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
+                    return;
+                }
 
-                    Message message = new Message();
-                    message.what = 2;
-                    message.getData().putString("type", type);
-                    message.getData().putInt("error", Config.TCP_SEND_SOCKET_FAIL_ERROR);
-                    mHandler.sendMessage(message);
-//                    mHandler.sendEmptyMessage(5);
-                    return false;
+                if (mSocketLists == null || mSocketLists.size() == 0) {
+                    if (listener != null) {
+                        listener.onError("disconnect usb tcp socket.");
+                    }
+                    return;
+                }
+
+                LogController.d(TAG,"usb send tcp data socketSize:"+mSocketLists.size());
+                for (Socket socket : mSocketLists) {
+                    PrintWriter pw = null;
+                    if (socket != null) {
+                        try {
+                            pw = new PrintWriter(new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true));
+                            pw.println(json);
+                            pw.flush();
+                            if (listener != null)
+                                listener.onSuccess(json);
+                            LogController.i(TAG, "usb send to sucess msg:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            if (listener != null) {
+                                listener.onError(e.getMessage());
+                            }
+                            mSocketLists.remove(socket);
+                            LogController.i(TAG, "usb send to sucess msg:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
+                        }
+                    }
                 }
             }
-        }
-        return false;
+        });
+
+
     }
 
 
@@ -590,21 +545,40 @@ public class TCPServerService extends Service {
         this.mListenerList.remove(listener);
     }
 
+    public void addDataReceivedListener(DataReceiveListener listener) {
+        this.mDataReceiveListenerList.clear();
+        this.mDataReceiveListenerList.add(listener);
+    }
+
+    public void removeDataReceivedListener(DataReceiveListener listener) {
+        this.mDataReceiveListenerList.remove(listener);
+    }
+
     private void notifySendSucess() {
         for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSendSuccess();
+//            mListenerList.get(i).onSendSuccess();
         }
     }
 
     private void notifySendError(int error) {
         for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSendError(error);
+//            mListenerList.get(i).onSendError(error);
         }
     }
 
-    private void notifyMessageReceived(String msg) {
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onMessageReceive(msg);
+    private void notifyMessageReceived(String message) {
+        // 心跳包的消息传递到上层
+        String type = "";
+        try {
+            JSONObject jsonObject = new JSONObject(message);
+            type = jsonObject.optString("msg");
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        if (!"pong".equalsIgnoreCase(type)) {
+            for (int i = 0; i < mDataReceiveListenerList.size(); i++) {
+                mDataReceiveListenerList.get(i).onMessageReceived(Config.TYPE_RECEIVE_TCP, message);
+            }
         }
     }
 
@@ -615,6 +589,9 @@ public class TCPServerService extends Service {
     }
 
     private void notifySocketConnectLost(String connWay) {
+        if (heartBreakTimer != null) {
+            heartBreakTimer.exit();
+        }
         for (int i = 0; i < mListenerList.size(); i++) {
             mListenerList.get(i).onSocketConnectLost(connWay);
         }
@@ -626,32 +603,6 @@ public class TCPServerService extends Service {
             mListenerList.get(i).onSocketConnectFail(message);
         }
     }
-
-    public void close() {
-
-        if (mThread != null) {
-            mThread.interrupt();
-        }
-
-        if (serverSocket != null) {
-            if (!serverSocket.isClosed()) {
-                try {
-                    serverSocket.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                serverSocket = null;
-            }
-        }
-        if (mSocket != null && !mSocket.isClosed()) {
-            try {
-                mSocket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
 
     /**
      * 心跳包检测
@@ -668,16 +619,14 @@ public class TCPServerService extends Service {
             if (isDestroy) {
                 if (heartBreakTimer != null)
                     heartBreakTimer.exit();
-                close();
+                stopConn();
                 return;
             }
 
             long duration = System.currentTimeMillis() - lastRecvTimeStamp;
             if (duration > Config.HEARTBREAK_NOREPLY_TIME) {
                 isAllowRequestMsgByJson = true;
-                mHandler.sendEmptyMessage(5);
-
-                LogController.i(TAG, "time out lost");
+                notifySocketConnectLost(Config.TCP_CONTECT_WAY_USB);
             } else if (duration > Config.HEARTBREAK_TIME) {
                 JSONObject jsonObject = new JSONObject();
                 try {
@@ -686,9 +635,7 @@ public class TCPServerService extends Service {
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
-
-                LogController.i(TAG, jsonObject.toString());
-                sendServerSocketMessage(jsonObject.toString(), Config.TCP_TYPE_HEART);
+                sendTcpData(jsonObject.toString(), null);
             }
         }
 
@@ -701,10 +648,8 @@ public class TCPServerService extends Service {
     @Override
     public void onDestroy() {
         isDestroy = true;
-        close();
+        stopConn();
         super.onDestroy();
-//        Toast.makeText(TCPServerService.this," service onDestroy",Toast.LENGTH_SHORT).show();
-
         LogController.i(TAG, "onDestroy");
     }
 }

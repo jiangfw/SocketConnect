@@ -26,7 +26,7 @@
             </intent-filter>
         </activity>
 
-        <service android:name=".socket.TCPServerService"/>
+        <service android:name=".socket.TCPUsbSocket"/>
 
 
     </application>
