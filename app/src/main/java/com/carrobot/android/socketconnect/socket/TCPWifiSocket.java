@@ -1,5 +1,7 @@
 package com.carrobot.android.socketconnect.socket;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Base64;
 
 import com.carrobot.android.socketconnect.listener.DataReceiveListener;
@@ -50,9 +52,12 @@ public class TCPWifiSocket implements Runnable {
 
     private Thread receiveTcpWifiThread = null;
 
+    //接口回调更新到主线程处理
+    private Handler mHandler = new Handler(Looper.getMainLooper());
+
     public TCPWifiSocket() {
-        mListenerList = new ArrayList<onSocketStatusListener>();
-        mDataReceiveListenerList = new ArrayList<DataReceiveListener>();
+        mListenerList = new ArrayList<>();
+        mDataReceiveListenerList = new ArrayList<>();
     }
 
     /**
@@ -61,12 +66,17 @@ public class TCPWifiSocket implements Runnable {
      * @param ip
      * @param port
      */
-    public void connectTcpWifiSocket(String ip, int port) {
-        //建立链接
-        startConn(ip, port);
-        //开启接收tcp消息线程
-        startTCPWifiSocketThread();
+    public void connectTcpWifiSocket(final String ip,final int port) {
 
+        SocketThreadPool.getSocketThreadPool().execute(new Runnable() {
+            @Override
+            public void run() {
+                //建立链接
+                startConn(ip, port);
+                //开启接收tcp消息线程
+                startTCPWifiSocketThread();
+            }
+        });
     }
 
     /**
@@ -107,7 +117,7 @@ public class TCPWifiSocket implements Runnable {
      * @param ip
      * @param port
      */
-    private void startConn(String ip, int port) {
+    private void startConn(final String ip, final int port) {
         try {
             if (mSocket == null) {
                 mSocket = new Socket(ip, port);
@@ -297,17 +307,13 @@ public class TCPWifiSocket implements Runnable {
                         printWriter.println(sofObject.toString());
                         LogController.i(TAG, "wifi write file start msg:" + sofObject.toString());
                     } else if ("success".equalsIgnoreCase(data)) {
-                        //校验成功
-                        if (mOnSocketFileListener != null)
-                            mOnSocketFileListener.onRomInstallSucess();
+                        onRomInstallSucess(mOnSocketFileListener);
                     } else if ("installing".equalsIgnoreCase(data)) {
                         String progress = jsonObject.optString("process");
-                        if (mOnSocketFileListener != null)
-                            mOnSocketFileListener.onRomInstalling(progress);
+                        onRomInstalling(mOnSocketFileListener, progress);
                     } else {
                         // md5error,failed...
-                        if (mOnSocketFileListener != null)
-                            mOnSocketFileListener.onRomInstallFail(data);
+                        onRomInstallFail(mOnSocketFileListener, data);
                     }
                 } else if ("sof".equalsIgnoreCase(msg) && file != null) {
                     //传输数据 {“msg”:”downloading”, “offset”:1234, “payload”:5678, “data”:[……二进制数据........]}
@@ -415,8 +421,7 @@ public class TCPWifiSocket implements Runnable {
                     String filePath = (file == null) ? "" : file.getPath();
                     // 升级包传输完成
                     if ("ok".equalsIgnoreCase(data)) {
-                        if (listener != null)
-                            listener.onSuccess(filePath);
+                        onSendSucess(listener, filePath);
                         //如果当前文件是最后一个文件，则通知服务端升级包全部传输完成
                         if (isFinishTransfer) {
                             //升级包更新完成 通知 {“msg”:”upgrade”, “data”:”end”}
@@ -430,8 +435,7 @@ public class TCPWifiSocket implements Runnable {
                         LogController.i(TAG, "wifi wirte file msg sucess! isFinishTransfer:" + isFinishTransfer);
                     } else if ("error".equalsIgnoreCase(data)) {
                         // 通知上层文件传输失败
-                        if (listener != null)
-                            listener.onError(filePath);
+                        onSendError(listener, filePath);
                         isAllowRequestMsgByJson = true;
                     }
                 } else {
@@ -441,8 +445,7 @@ public class TCPWifiSocket implements Runnable {
                 e.printStackTrace();
                 // 通知上层文件传输失败
                 String filePath = (file == null) ? "" : file.getPath();
-                if (listener != null)
-                    listener.onError(filePath);
+                onSendError(listener, filePath);
                 isAllowRequestMsgByJson = true;
                 LogController.i(TAG, "wifi file ex:" + e.toString());
             }
@@ -467,23 +470,17 @@ public class TCPWifiSocket implements Runnable {
             public void run() {
 
                 if (!isAllowRequestMsgByJson) {
-                    if (listener != null)
-                        listener.onError("wifi file transfering...");
+                    onSendError(listener, "wifi file transfering...");
                     LogController.i(TAG, "wifi file transfering:" + msg.toString() + ",threadName:" + Thread.currentThread().getName());
                     return;
                 }
                 try {
-
                     printWriter.println(msg.toString());
-                    if (listener != null) {
-                        listener.onSuccess(msg);
-                    }
+                    onSendSucess(listener, msg);
                     LogController.i(TAG, "wifi send to sucess msg:" + msg.toString() + ",threadName:" + Thread.currentThread().getName());
                 } catch (Exception e) {
                     e.printStackTrace();
-                    if (listener != null) {
-                        listener.onError("wifi send fail error.");
-                    }
+                    onSendError(listener, "wifi send fail error.");
                     LogController.i(TAG, "wifi send to fail msg:" + e.getMessage() + ",threadName:" + Thread.currentThread().getName());
                 }
             }
@@ -513,42 +510,113 @@ public class TCPWifiSocket implements Runnable {
         this.mDataReceiveListenerList.remove(listener);
     }
 
-    private void notifyDataReceived(String message) {
-        // 心跳包的消息传递到上层
-        String type = "";
-        try {
-            JSONObject jsonObject = new JSONObject(message);
-            type = jsonObject.optString("msg");
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-        if (!"pong".equalsIgnoreCase(type)) {
-            for (int i = 0; i < mDataReceiveListenerList.size(); i++) {
-                mDataReceiveListenerList.get(i).onMessageReceived(Config.TYPE_RECEIVE_TCP, message);
+    private void onRomInstalling(final onSocketFileListener listener, final String progress) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onRomInstalling(progress);
             }
-        }
+        });
     }
 
-    private void notifySocketConnectSucess(String connWay) {
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSocketConnectSucess(connWay);
-        }
+    private void onRomInstallFail(final onSocketFileListener listener, final String error) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onRomInstallFail(error);
+            }
+        });
     }
 
-    private void notifySocketConnectFail(String message) {
-
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSocketConnectFail(message);
-        }
+    private void onRomInstallSucess(final onSocketFileListener listener) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onRomInstallSucess();
+            }
+        });
     }
 
-    private void notifySocketConnectLost(String connWay) {
 
-        if (heartBreakTimer != null) {
-            heartBreakTimer.exit();
-        }
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSocketConnectLost(connWay);
-        }
+    private void onSendError(final DataSendListener listener, final String error) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onError(error);
+            }
+        });
+
+    }
+
+    private void onSendSucess(final DataSendListener listener, final String message) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null) {
+                    listener.onSuccess(message);
+                }
+            }
+        });
+    }
+
+    private void notifyDataReceived(final String message) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                // 心跳包的消息传递到上层
+                String type = "";
+                try {
+                    JSONObject jsonObject = new JSONObject(message);
+                    type = jsonObject.optString("msg");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                if (!"pong".equalsIgnoreCase(type)) {
+                    for (int i = 0; i < mDataReceiveListenerList.size(); i++) {
+                        mDataReceiveListenerList.get(i).onMessageReceived(Config.TYPE_RECEIVE_TCP, message);
+                    }
+                }
+            }
+        });
+    }
+
+    private void notifySocketConnectSucess(final String connWay) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < mListenerList.size(); i++) {
+                    mListenerList.get(i).onSocketConnectSucess(connWay);
+                }
+            }
+        });
+    }
+
+    private void notifySocketConnectFail(final String message) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < mListenerList.size(); i++) {
+                    mListenerList.get(i).onSocketConnectFail(message);
+                }
+            }
+        });
+    }
+
+    private void notifySocketConnectLost(final String connWay) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (heartBreakTimer != null) {
+                    heartBreakTimer.exit();
+                }
+                for (int i = 0; i < mListenerList.size(); i++) {
+                    mListenerList.get(i).onSocketConnectLost(connWay);
+                }
+            }
+        });
     }
 }

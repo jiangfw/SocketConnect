@@ -3,11 +3,9 @@ package com.carrobot.android.socketconnect.socket;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Binder;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.Message;
 import android.util.Base64;
 
 import com.carrobot.android.socketconnect.listener.DataReceiveListener;
@@ -47,18 +45,20 @@ public class TCPUsbSocket extends Service implements Runnable {
     private HeartBreakTimer heartBreakTimer;//心跳包计时器
     private long lastRecvTimeStamp = 0;//用于判断检测心跳包时间戳
 
+    //接口回调更新到主线程处理
+    private Handler mHandler = new Handler(Looper.getMainLooper());
+
     private ServerSocket serverSocket = null;
-    private ArrayList<onSocketStatusListener> mListenerList = new ArrayList<onSocketStatusListener>();
+    private ArrayList<onSocketStatusListener> mListenerList = new ArrayList<>();
     private onSocketFileListener mOnSocketFileListener;
 
-    private ArrayList<DataReceiveListener> mDataReceiveListenerList = new ArrayList<DataReceiveListener>();
+    private ArrayList<DataReceiveListener> mDataReceiveListenerList = new ArrayList<>();
 
 
     private Thread receiveTcpUsbThread = null;
 
     private List<Socket> mSocketLists = new ArrayList<Socket>();
 
-    //    private Socket mSocket = null;
     private boolean isDestroy = false;
 
 
@@ -70,10 +70,15 @@ public class TCPUsbSocket extends Service implements Runnable {
 
 
     public void connectTcpUsbSocket() {
-        //1.开启serversocket监听
-        startConn();
-        //2.启动接受消息的线程
-        startTCPUsbSocketThread();
+        SocketThreadPool.getSocketThreadPool().post(new Runnable() {
+            @Override
+            public void run() {
+                //1.开启serversocket监听
+                startConn();
+                //2.启动接受消息的线程
+                startTCPUsbSocketThread();
+            }
+        });
     }
 
     public void disconnectTcpUsbSocket() {
@@ -236,7 +241,7 @@ public class TCPUsbSocket extends Service implements Runnable {
                     // 用于检测心跳包
                     lastRecvTimeStamp = System.currentTimeMillis();
                     // 处理返回的消息
-                    handleReceivedMessage(line,mTransferFile,mFileSendListener);
+                    handleReceivedMessage(line, mTransferFile, mFileSendListener);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -273,17 +278,15 @@ public class TCPUsbSocket extends Service implements Runnable {
                             printWriter.println(sofObject.toString());
                             LogController.i(TAG, "usb write file start msg:" + sofObject.toString());
                         } else if ("success".equalsIgnoreCase(data)) {
-                            //校验成功
-                            if (mOnSocketFileListener != null)
-                                mOnSocketFileListener.onRomInstallSucess();
+                            //ROM升级成功
+                            onRomInstallSucess(mOnSocketFileListener);
                         } else if ("installing".equalsIgnoreCase(data)) {
+                            //ROM安装进度
                             String progress = jsonObject.optString("process");
-                            if (mOnSocketFileListener != null)
-                                mOnSocketFileListener.onRomInstalling(progress);
+                            onRomInstalling(mOnSocketFileListener,progress);
                         } else {
-                            // md5error,failed...
-                            if (mOnSocketFileListener != null)
-                                mOnSocketFileListener.onRomInstallFail(data);
+                            // ROM安装失败 md5error,failed...
+                            onRomInstallFail(mOnSocketFileListener,data);
                         }
                     } else if ("sof".equalsIgnoreCase(msg) && file != null) {
                         //传输数据 {“msg”:”downloading”, “offset”:1234, “payload”:5678, “data”:[……二进制数据........]}
@@ -391,8 +394,8 @@ public class TCPUsbSocket extends Service implements Runnable {
                         String filePath = (file == null) ? "" : file.getPath();
                         // 升级包传输完成
                         if ("ok".equalsIgnoreCase(data)) {
-                            if (listener != null)
-                                listener.onSuccess(filePath);
+                            //文件发送成功回调
+                            onSendSucess(listener, filePath);
                             //如果当前文件是最后一个文件，则通知服务端升级包全部传输完成
                             if (isFinishTransfer) {
                                 //升级包更新完成 通知 {“msg”:”upgrade”, “data”:”end”}
@@ -406,8 +409,7 @@ public class TCPUsbSocket extends Service implements Runnable {
                             LogController.i(TAG, "usb wirte file msg sucess! isFinishTransfer:" + isFinishTransfer);
                         } else if ("error".equalsIgnoreCase(data)) {
                             // 通知上层文件传输失败
-                            if (listener != null)
-                                listener.onError(filePath);
+                            onSendError(listener, filePath);
                             isAllowRequestMsgByJson = true;
                         }
                     } else {
@@ -417,8 +419,7 @@ public class TCPUsbSocket extends Service implements Runnable {
                     e.printStackTrace();
                     // 通知上层文件传输失败
                     String filePath = (file == null) ? "" : file.getPath();
-                    if (listener != null)
-                        listener.onError(filePath);
+                    onSendError(listener, filePath);
                     isAllowRequestMsgByJson = true;
                     LogController.i(TAG, "usb file ex:" + e.toString());
                 }
@@ -439,6 +440,7 @@ public class TCPUsbSocket extends Service implements Runnable {
 
     /**
      * 发送文件
+     *
      * @param file
      * @param isStart
      * @param isFinish
@@ -468,8 +470,7 @@ public class TCPUsbSocket extends Service implements Runnable {
                         LogController.i(TAG, "usb file upgrade start :" + jsonObject.toString());
                     } catch (Exception e) {
                         e.printStackTrace();
-                        if (listener != null)
-                            listener.onError("usb file upgrade start error.");
+                        onSendError(listener, "usb file upgrade start error.");
                         LogController.i(TAG, "usb file upgrade start error! ex:" + e.toString());
                     }
                 }
@@ -481,6 +482,7 @@ public class TCPUsbSocket extends Service implements Runnable {
 
     /**
      * 发送文本消息
+     *
      * @param json
      * @param listener
      */
@@ -490,21 +492,17 @@ public class TCPUsbSocket extends Service implements Runnable {
             @Override
             public void run() {
                 if (!isAllowRequestMsgByJson) {
-                    if (listener != null) {
-                        listener.onError("usb file transfering...");
-                    }
+                    onSendError(listener, "usb file transfering...");
                     LogController.i(TAG, "usb file transfering:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
                     return;
                 }
 
                 if (mSocketLists == null || mSocketLists.size() == 0) {
-                    if (listener != null) {
-                        listener.onError("disconnect usb tcp socket.");
-                    }
+                    onSendError(listener, "disconnect usb tcp socket.");
                     return;
                 }
 
-                LogController.d(TAG,"usb send tcp data socketSize:"+mSocketLists.size());
+                LogController.d(TAG, "usb send tcp data socketSize:" + mSocketLists.size());
                 for (Socket socket : mSocketLists) {
                     PrintWriter pw = null;
                     if (socket != null) {
@@ -512,14 +510,11 @@ public class TCPUsbSocket extends Service implements Runnable {
                             pw = new PrintWriter(new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true));
                             pw.println(json);
                             pw.flush();
-                            if (listener != null)
-                                listener.onSuccess(json);
+                            onSendSucess(listener, json);
                             LogController.i(TAG, "usb send to sucess msg:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
                         } catch (Exception e) {
                             e.printStackTrace();
-                            if (listener != null) {
-                                listener.onError(e.getMessage());
-                            }
+                            onSendError(listener, e.getMessage());
                             mSocketLists.remove(socket);
                             LogController.i(TAG, "usb send to sucess msg:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
                         }
@@ -554,55 +549,118 @@ public class TCPUsbSocket extends Service implements Runnable {
         this.mDataReceiveListenerList.remove(listener);
     }
 
-    private void notifySendSucess() {
-        for (int i = 0; i < mListenerList.size(); i++) {
-//            mListenerList.get(i).onSendSuccess();
-        }
-    }
 
-    private void notifySendError(int error) {
-        for (int i = 0; i < mListenerList.size(); i++) {
-//            mListenerList.get(i).onSendError(error);
-        }
-    }
-
-    private void notifyMessageReceived(String message) {
-        // 心跳包的消息传递到上层
-        String type = "";
-        try {
-            JSONObject jsonObject = new JSONObject(message);
-            type = jsonObject.optString("msg");
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-        if (!"pong".equalsIgnoreCase(type)) {
-            for (int i = 0; i < mDataReceiveListenerList.size(); i++) {
-                mDataReceiveListenerList.get(i).onMessageReceived(Config.TYPE_RECEIVE_TCP, message);
+    private void onRomInstalling(final onSocketFileListener listener, final String progress) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onRomInstalling(progress);
             }
-        }
+        });
     }
 
-    private void notifySocketConnectSucess(String connWay) {
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSocketConnectSucess(connWay);
-        }
+    private void onRomInstallFail(final onSocketFileListener listener, final String error) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onRomInstallFail(error);
+            }
+        });
     }
 
-    private void notifySocketConnectLost(String connWay) {
-        if (heartBreakTimer != null) {
-            heartBreakTimer.exit();
-        }
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSocketConnectLost(connWay);
-        }
+    private void onRomInstallSucess(final onSocketFileListener listener) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onRomInstallSucess();
+            }
+        });
     }
 
-    private void notifySocketConnectFail(String message) {
 
-        for (int i = 0; i < mListenerList.size(); i++) {
-            mListenerList.get(i).onSocketConnectFail(message);
-        }
+    private void onSendError(final DataSendListener listener, final String error) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onError(error);
+            }
+        });
+
     }
+
+    private void onSendSucess(final DataSendListener listener, final String message) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null) {
+                    listener.onSuccess(message);
+                }
+            }
+        });
+    }
+
+
+    private void notifyMessageReceived(final String message) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                // 心跳包的消息传递到上层
+                String type = "";
+                try {
+                    JSONObject jsonObject = new JSONObject(message);
+                    type = jsonObject.optString("msg");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                if (!"pong".equalsIgnoreCase(type)) {
+                    for (int i = 0; i < mDataReceiveListenerList.size(); i++) {
+                        mDataReceiveListenerList.get(i).onMessageReceived(Config.TYPE_RECEIVE_TCP, message);
+                    }
+                }
+            }
+        });
+    }
+
+    private void notifySocketConnectSucess(final String connWay) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < mListenerList.size(); i++) {
+                    mListenerList.get(i).onSocketConnectSucess(connWay);
+                }
+            }
+        });
+    }
+
+    private void notifySocketConnectLost(final String connWay) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (heartBreakTimer != null) {
+                    heartBreakTimer.exit();
+                }
+                for (int i = 0; i < mListenerList.size(); i++) {
+                    mListenerList.get(i).onSocketConnectLost(connWay);
+                }
+            }
+        });
+    }
+
+    private void notifySocketConnectFail(final String message) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < mListenerList.size(); i++) {
+                    mListenerList.get(i).onSocketConnectFail(message);
+                }
+            }
+        });
+    }
+
 
     /**
      * 心跳包检测

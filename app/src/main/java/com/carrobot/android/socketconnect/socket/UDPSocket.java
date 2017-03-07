@@ -1,6 +1,7 @@
 package com.carrobot.android.socketconnect.socket;
 
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 
 import com.carrobot.android.socketconnect.listener.DataReceiveListener;
@@ -31,6 +32,8 @@ public class UDPSocket implements Runnable {
 
     private ArrayList<DataReceiveListener> mDataReceiveListenerList;
 
+    //接口回调更新到主线程处理
+    private Handler mHandler = new Handler(Looper.getMainLooper());
 
     private DatagramSocket mDatagramSocket = null;
     private DatagramPacket mDatagramPacketSend;
@@ -42,39 +45,6 @@ public class UDPSocket implements Runnable {
 
     public UDPSocket() {
         mDataReceiveListenerList = new ArrayList<DataReceiveListener>();
-    }
-
-
-    /**
-     * 发送UDP消息
-     *
-     * @param msgSend
-     * @return
-     */
-    public String sendUdpData(String msgSend) {
-        InetAddress hostAddress = null;
-        try {
-            Config.UDP_BROADCAST_IP = Utils.getBroadcastAddress();
-            if (Config.UDP_BROADCAST_IP == null) {
-                LogController.i(TAG, "broadcast ip address error.");
-                return "broadcast ip address error.";
-            }
-            hostAddress = InetAddress.getByName(Config.UDP_BROADCAST_IP);
-            LogController.i(TAG, "udp broadcast address：" + Config.UDP_BROADCAST_IP);
-        } catch (UnknownHostException e) {
-            LogController.i(TAG, "udp can not find address.");
-            e.printStackTrace();
-        }
-
-        mDatagramPacketSend = new DatagramPacket(msgSend.getBytes(), msgSend.getBytes().length, hostAddress, Config.UDP_SEND_PORT);
-        try {
-            if (mDatagramSocket != null)
-                mDatagramSocket.send(mDatagramPacketSend);
-        } catch (IOException e) {
-            e.printStackTrace();
-            LogController.i(TAG, "upd send to message fail.");
-        }
-        return msgSend;
     }
 
     /**
@@ -91,18 +61,14 @@ public class UDPSocket implements Runnable {
                 try {
                     Config.UDP_BROADCAST_IP = Utils.getBroadcastAddress();
                     if (Config.UDP_BROADCAST_IP == null) {
-                        if (dataSendListener != null) {
-                            dataSendListener.onError("broadcast ip address error");
-                        }
+                        onSendError(dataSendListener, "broadcast ip address error");
                         LogController.i(TAG, "broadcast ip address error.");
                     }
                     hostAddress = InetAddress.getByName(Config.UDP_BROADCAST_IP);
                     LogController.i(TAG, "udp broadcast address：" + Config.UDP_BROADCAST_IP);
                 } catch (UnknownHostException e) {
                     e.printStackTrace();
-                    if (dataSendListener != null) {
-                        dataSendListener.onError("unknown host not find address");
-                    }
+                    onSendError(dataSendListener, "unknown host not find address");
                     LogController.i(TAG, "udp can not find address.");
                 }
 
@@ -110,16 +76,12 @@ public class UDPSocket implements Runnable {
                 try {
                     if (mDatagramSocket != null) {
                         mDatagramSocket.send(mDatagramPacketSend);
-                        if (dataSendListener != null) {
-                            dataSendListener.onSuccess(sendMsg);
-                            LogController.i(TAG, "upd send to message sucess.");
-                        }
+                        onSendSucess(dataSendListener, sendMsg);
+                        LogController.i(TAG, "upd send to message sucess.");
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
-                    if (dataSendListener != null) {
-                        dataSendListener.onError("send msg fail");
-                    }
+                    onSendError(dataSendListener, "send msg fail");
                     LogController.i(TAG, "upd send to message fail.");
                 }
             }
@@ -178,11 +140,11 @@ public class UDPSocket implements Runnable {
                 mDatagramSocket.bind(new InetSocketAddress(Config.UDP_RECEIVE_PORT));
                 LogController.i(TAG, "udp init");
             }
-
             // 创建数据接受包
             if (mDatagramPacketReceive == null)
                 mDatagramPacketReceive = new DatagramPacket(receiveBuffer, BUFFERLENGTH);
 
+            // 开启接受消息线程
             startUDPSocketThread();
         } catch (SocketException e) {
             e.printStackTrace();
@@ -239,13 +201,42 @@ public class UDPSocket implements Runnable {
         LogController.d(TAG, "removeDataReceiverListener");
     }
 
-    private void notifyMessageReceived(String msg) {
-        for (int i = 0; mDataReceiveListenerList != null && i < mDataReceiveListenerList.size(); i++) {
-            DataReceiveListener listener = mDataReceiveListenerList.get(i);
-            if (listener != null) {
-                listener.onMessageReceived(Config.TYPE_RECEIVE_UDP, msg);
+
+    private void onSendError(final DataSendListener listener, final String error) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null)
+                    listener.onError(error);
             }
-        }
-        LogController.d(TAG, " notifyMessageReceived = " + (mDataReceiveListenerList == null ? 0 : mDataReceiveListenerList.size()));
+        });
+
+    }
+
+    private void onSendSucess(final DataSendListener listener, final String message) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (listener != null) {
+                    listener.onSuccess(message);
+                }
+            }
+        });
+    }
+
+
+    private void notifyMessageReceived(final String msg) {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; mDataReceiveListenerList != null && i < mDataReceiveListenerList.size(); i++) {
+                    DataReceiveListener listener = mDataReceiveListenerList.get(i);
+                    if (listener != null) {
+                        listener.onMessageReceived(Config.TYPE_RECEIVE_UDP, msg);
+                    }
+                }
+                LogController.d(TAG, " notifyMessageReceived = " + (mDataReceiveListenerList == null ? 0 : mDataReceiveListenerList.size()));
+            }
+        });
     }
 }
