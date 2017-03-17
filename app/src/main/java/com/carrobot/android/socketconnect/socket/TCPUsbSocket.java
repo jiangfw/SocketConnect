@@ -70,7 +70,7 @@ public class TCPUsbSocket extends Service implements Runnable {
 
 
     public void connectTcpUsbSocket() {
-        SocketThreadPool.getSocketThreadPool().post(new Runnable() {
+        SocketThreadPool.getSocketThreadPool().execute(new Runnable() {
             @Override
             public void run() {
                 //1.开启serversocket监听
