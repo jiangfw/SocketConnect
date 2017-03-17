@@ -25,7 +25,6 @@ public class LogController {
 
 	}
 
-	private static final String TAG = "SocketClient";
 	private static boolean LOG_ENABLE = true;
 	private static  boolean DETAIL_ENABLE = true;
 
