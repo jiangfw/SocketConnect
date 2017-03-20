@@ -237,17 +237,16 @@ public class TCPWifiSocket implements Runnable {
      * @param listener
      */
     public void sendTcpFileData(final File file, final boolean isFirst, final boolean isFinish, final DataSendListener listener) {
-
+        TCPWifiSocket.this.mTransferFile = file;
+        TCPWifiSocket.this.isFinishTransfer = isFinish;
+        TCPWifiSocket.this.mFileSendListener = listener;
+        isAllowRequestMsgByJson = false;
         SocketThreadPool.getSocketThreadPool().post(new Runnable() {
             @Override
             public void run() {
                 //1.通知开始升级 {“msg”:”upgrade”, “data”:”start"}
-                TCPWifiSocket.this.mTransferFile = file;
-                TCPWifiSocket.this.isFinishTransfer = isFinish;
-                TCPWifiSocket.this.mFileSendListener = listener;
                 JSONObject jsonObject = new JSONObject();
                 try {
-                    isAllowRequestMsgByJson = false;
                     if (isFirst) {
                         jsonObject.put("msg", "upgrade");
                         jsonObject.put("data", "start");

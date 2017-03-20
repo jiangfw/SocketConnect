@@ -447,14 +447,14 @@ public class TCPUsbSocket extends Service implements Runnable {
      * @param listener
      */
     public void sendTcpFileData(final File file, final boolean isStart, final boolean isFinish, final DataSendListener listener) {
+        TCPUsbSocket.this.mTransferFile = file;
+        TCPUsbSocket.this.isFinishTransfer = isFinish;
+        TCPUsbSocket.this.mFileSendListener = listener;
+        isAllowRequestMsgByJson = false;
         //1.通知开始升级 {“msg”:”upgrade”, “data”:”start"}
         SocketThreadPool.getSocketThreadPool().post(new Runnable() {
             @Override
             public void run() {
-                TCPUsbSocket.this.mTransferFile = file;
-                TCPUsbSocket.this.isFinishTransfer = isFinish;
-                TCPUsbSocket.this.mFileSendListener = listener;
-                isAllowRequestMsgByJson = false;
                 for (Socket socket : mSocketLists) {
                     JSONObject jsonObject = new JSONObject();
                     try {
