@@ -421,7 +421,6 @@ public class TCPWifiSocket implements Runnable {
                     String filePath = (file == null) ? "" : file.getPath();
                     // 升级包传输完成
                     if ("ok".equalsIgnoreCase(data)) {
-                        onSendSucess(listener, filePath);
                         //如果当前文件是最后一个文件，则通知服务端升级包全部传输完成
                         if (isFinishTransfer) {
                             //升级包更新完成 通知 {“msg”:”upgrade”, “data”:”end”}
@@ -432,6 +431,7 @@ public class TCPWifiSocket implements Runnable {
                             isAllowRequestMsgByJson = true;
                             LogController.i(TAG, "wifi write upgrade end msg:" + sofObject.toString());
                         }
+                        onSendSucess(listener, filePath);
                         LogController.i(TAG, "wifi wirte file msg sucess! isFinishTransfer:" + isFinishTransfer);
                     } else if ("error".equalsIgnoreCase(data)) {
                         // 通知上层文件传输失败

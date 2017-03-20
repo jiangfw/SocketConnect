@@ -394,8 +394,6 @@ public class TCPUsbSocket extends Service implements Runnable {
                         String filePath = (file == null) ? "" : file.getPath();
                         // 升级包传输完成
                         if ("ok".equalsIgnoreCase(data)) {
-                            //文件发送成功回调
-                            onSendSucess(listener, filePath);
                             //如果当前文件是最后一个文件，则通知服务端升级包全部传输完成
                             if (isFinishTransfer) {
                                 //升级包更新完成 通知 {“msg”:”upgrade”, “data”:”end”}
@@ -406,6 +404,8 @@ public class TCPUsbSocket extends Service implements Runnable {
                                 isAllowRequestMsgByJson = true;
                                 LogController.i(TAG, "usb write upgrade end msg:" + sofObject.toString());
                             }
+                            //文件发送成功回调
+                            onSendSucess(listener, filePath);
                             LogController.i(TAG, "usb wirte file msg sucess! isFinishTransfer:" + isFinishTransfer);
                         } else if ("error".equalsIgnoreCase(data)) {
                             // 通知上层文件传输失败
