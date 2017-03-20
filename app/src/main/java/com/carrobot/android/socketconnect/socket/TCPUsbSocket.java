@@ -70,28 +70,34 @@ public class TCPUsbSocket extends Service implements Runnable {
 
 
     public void connectTcpUsbSocket() {
-        SocketThreadPool.getSocketThreadPool().execute(new Runnable() {
+        SocketThreadPool.getSocketThreadPool().post(new Runnable() {
             @Override
             public void run() {
                 //1.开启serversocket监听
-                startConn();
-                //2.启动接受消息的线程
-                startTCPUsbSocketThread();
+                if(startConn()){
+                    //2.启动接受消息的线程
+                    startTCPUsbSocketThread();
+                }
             }
         });
     }
 
     public void disconnectTcpUsbSocket() {
-        //1.关闭serversocket监听
-        stopConn();
-        //2.关闭接受消息的线程
-        stopTCPUsbSocketThread();
+        SocketThreadPool.getSocketThreadPool().post(new Runnable() {
+            @Override
+            public void run() {
+                //1.关闭serversocket监听
+                stopConn();
+                //2.关闭接受消息的线程
+                stopTCPUsbSocketThread();
+            }
+        });
     }
 
     /**
      * 开启server端监听
      */
-    private void startConn() {
+    private boolean startConn() {
         try {
             if (serverSocket == null) {
                 serverSocket = new ServerSocket();
@@ -99,10 +105,12 @@ public class TCPUsbSocket extends Service implements Runnable {
                 serverSocket.bind(new InetSocketAddress(Config.TCP_SERVER_SOCKET_PORT));
             }
             LogController.i(TAG, "startConn() 开始建立USB的TCP链接成功.");
+            return true;
         } catch (IOException e) {
             e.printStackTrace();
             LogController.i(TAG, "startConn() 开始建立USB的TCP链接失败.");
         }
+        return false;
     }
 
     /**

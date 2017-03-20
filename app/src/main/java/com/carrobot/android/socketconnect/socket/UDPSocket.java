@@ -54,7 +54,7 @@ public class UDPSocket implements Runnable {
      * @param dataSendListener
      */
     public void sendUdpData(final String sendMsg, final DataSendListener dataSendListener) {
-        SocketThreadPool.getSocketThreadPool().execute(new Runnable() {
+        SocketThreadPool.getSocketThreadPool().post(new Runnable() {
             @Override
             public void run() {
                 InetAddress hostAddress = null;

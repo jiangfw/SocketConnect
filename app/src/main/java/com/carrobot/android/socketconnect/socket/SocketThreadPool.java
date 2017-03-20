@@ -33,12 +33,12 @@ public class SocketThreadPool {
         socketController.post(runnable);
     }
 
-    public void execute(Runnable runnable){
-        initExecuter();
-        if(executor!=null){
-            executor.execute(runnable);
-        }
-    }
+//    public void execute(Runnable runnable){
+//        initExecuter();
+//        if(executor!=null){
+//            executor.execute(runnable);
+//        }
+//    }
 
     public void shutdown(){
         initExecuter();

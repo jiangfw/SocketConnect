@@ -68,13 +68,14 @@ public class TCPWifiSocket implements Runnable {
      */
     public void connectTcpWifiSocket(final String ip,final int port) {
 
-        SocketThreadPool.getSocketThreadPool().execute(new Runnable() {
+        SocketThreadPool.getSocketThreadPool().post(new Runnable() {
             @Override
             public void run() {
                 //建立链接
-                startConn(ip, port);
-                //开启接收tcp消息线程
-                startTCPWifiSocketThread();
+                if(startConn(ip, port)){
+                    //开启接收tcp消息线程
+                    startTCPWifiSocketThread();
+                }
             }
         });
     }
@@ -83,10 +84,15 @@ public class TCPWifiSocket implements Runnable {
      * 关闭TCP链接
      */
     public void disconnectTcpWifiSocket() {
-        //关闭接受tcp消息线程
-        stopTCPWifiSocketThread();
-        //关闭链接
-        stopConn();
+        SocketThreadPool.getSocketThreadPool().post(new Runnable() {
+            @Override
+            public void run() {
+                //关闭接受tcp消息线程
+                stopTCPWifiSocketThread();
+                //关闭链接
+                stopConn();
+            }
+        });
 
     }
 
@@ -117,7 +123,7 @@ public class TCPWifiSocket implements Runnable {
      * @param ip
      * @param port
      */
-    private void startConn(final String ip, final int port) {
+    private boolean startConn(final String ip, final int port) {
         try {
             if (mSocket == null) {
                 mSocket = new Socket(ip, port);
@@ -138,11 +144,13 @@ public class TCPWifiSocket implements Runnable {
             heartBreakTimer.start(-1, Config.HEARTBREAK_TIME);
 
             LogController.i(TAG, "startConn(ip:" + ip + ",port:" + port + ") 开始建立WIFI的TCP链接成功.");
+            return true;
         } catch (Exception e) {
             e.printStackTrace();
             notifySocketConnectFail(e.getMessage());
             LogController.i(TAG, "startConn(ip:" + ip + ",port:" + port + ") 开始建立WIFI的TCP链接失败.");
         }
+        return false;
     }
 
     /**
