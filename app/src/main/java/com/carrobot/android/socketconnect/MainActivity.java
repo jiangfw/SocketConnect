@@ -458,7 +458,14 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
     @Override
     public void onMessageReceived(int type, String message) {
         LogController.d(TAG, "onMessageReceived,type:" + type + ",message:" + message);
-        id_tv_recevie.setText(id_tv_recevie.getText().toString() +"factory:"+ message.toString() + "\n");
+
+        String strType = "factory:";
+        if(type==Config.TYPE_RECEIVE_TCP){
+            strType = "factory:";
+        }else if(type==Config.TYPE_RECEIVE_OBD){
+            strType = "obd:";
+        }
+        id_tv_recevie.setText(id_tv_recevie.getText().toString() +strType+ message.toString() + "\n");
     }
 
     @Override
