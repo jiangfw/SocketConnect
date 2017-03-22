@@ -199,7 +199,7 @@ public class TCPWifiObdSocket implements Runnable {
             @Override
             public void run() {
                 for (int i = 0; i < mDataReceiveListenerList.size(); i++) {
-                    mDataReceiveListenerList.get(i).onMessageReceived(Config.TYPE_RECEIVE_TCP, message);
+                    mDataReceiveListenerList.get(i).onMessageReceived(Config.TYPE_RECEIVE_WIFI_OBD, message);
                 }
             }
         });

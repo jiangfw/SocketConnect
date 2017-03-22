@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.SystemClock;
 import android.provider.Settings;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
@@ -19,7 +18,6 @@ import com.carrobot.android.socketconnect.listener.DataSendListener;
 import com.carrobot.android.socketconnect.listener.onSocketFileListener;
 import com.carrobot.android.socketconnect.listener.onSocketStatusListener;
 import com.carrobot.android.socketconnect.socket.SocketManager;
-import com.carrobot.android.socketconnect.socket.SocketThreadPool;
 import com.carrobot.android.socketconnect.utils.Config;
 import com.carrobot.android.socketconnect.utils.FileCache;
 import com.carrobot.android.socketconnect.utils.LogController;
@@ -71,7 +69,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
                     @Override
                     public void onError(String error) {
-                        Toast.makeText(MainActivity.this,"wifi error:"+error,Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "wifi error:" + error, Toast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -92,7 +90,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
                     @Override
                     public void onError(String error) {
-                        Toast.makeText(MainActivity.this,"usb error:"+error,Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "usb error:" + error, Toast.LENGTH_SHORT).show();
                     }
                 });
 
@@ -113,7 +111,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
                     @Override
                     public void onError(String error) {
-                        Toast.makeText(MainActivity.this,"wifi obd error:"+error,Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "wifi obd error:" + error, Toast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -134,7 +132,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
                     @Override
                     public void onError(String error) {
-                        Toast.makeText(MainActivity.this,"usb obd error:"+error,Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "usb obd error:" + error, Toast.LENGTH_SHORT).show();
                     }
                 });
 
@@ -156,7 +154,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
                     @Override
                     public void onError(String error) {
-                        Toast.makeText(MainActivity.this,"error:"+error,Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "error:" + error, Toast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -203,98 +201,10 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
             }
         });
 
-        Button id_btn_test = (Button)findViewById(R.id.id_btn_test);
+        Button id_btn_test = (Button) findViewById(R.id.id_btn_test);
         id_btn_test.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:1"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:2"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:3"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:4"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-
-                        SystemClock.sleep(2000);
-                        System.out.println("thread post i:5"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:6"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:7"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:8"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:9"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        SystemClock.sleep(2000);
-
-                        System.out.println("thread post i:10"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:11"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:12"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:13"+ System.currentTimeMillis());
-                    }
-                });
-                SocketThreadPool.getSocketThreadPool().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println("thread post i:14"+ System.currentTimeMillis());
-                    }
-                });
             }
         });
 
@@ -350,7 +260,6 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
     }
 
 
-
     /**
      * 获取upd广播的IP地址和端口号
      *
@@ -359,17 +268,6 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
     @Override
     public void onSocketUdpInfo(String message) {
         Log.i("udpClient", "onSocketUdpInfo" + message);
-
-        /**
-         * 响应：
-         {
-         “msg”:”reqConn”,
-         “ip”:”xx.xx.xx.xx”,
-         “factoryPort”: 1234,   // 工模测试服务的端口号
-         “OBDPort”: 5678      // OBD消息服务的端口号
-         }
-         */
-
         try {
             JSONObject jsonObject = new JSONObject(message);
             String ip = jsonObject.optString("ip");
@@ -416,8 +314,9 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mSocketManager.stopSocketConnection();
         mSocketManager.removeOnSocketStatusListener(this);
+        mSocketManager.removeDataReceivedListener(this);
+        mSocketManager.stopSocketConnection();
     }
 
     @Override
@@ -460,12 +359,14 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
         LogController.d(TAG, "onMessageReceived,type:" + type + ",message:" + message);
 
         String strType = "factory:";
-        if(type==Config.TYPE_RECEIVE_TCP){
+        if (type == Config.TYPE_RECEIVE_TCP) {
             strType = "factory:";
-        }else if(type==Config.TYPE_RECEIVE_OBD){
-            strType = "obd:";
+        } else if (type == Config.TYPE_RECEIVE_USB_OBD) {
+            strType = "usb obd:";
+        } else if (type == Config.TYPE_RECEIVE_WIFI_OBD) {
+            strType = "wifi obd:";
         }
-        id_tv_recevie.setText(id_tv_recevie.getText().toString() +strType+ message.toString() + "\n");
+        id_tv_recevie.setText(id_tv_recevie.getText().toString() + strType + message.toString() + "\n");
     }
 
     @Override

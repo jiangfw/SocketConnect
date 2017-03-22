@@ -149,7 +149,7 @@ public class SocketManager {
                         mTCPWifiObdSocket.addDataReceivedListener(new DataReceiveListener() {
                             @Override
                             public void onMessageReceived(int type, final String message) {
-                                notifyMessageReceived(Config.TYPE_RECEIVE_OBD, message);
+                                notifyMessageReceived(type, message);
                                 LogController.i(TAG, "wifi obd received msg:" + message);
                             }
 
@@ -420,7 +420,7 @@ public class SocketManager {
                     @Override
                     public void onMessageReceived(int type, String message) {
                         notifyMessageReceived(type, message);
-                        LogController.i(TAG, "usb received msg:" + message);
+                        LogController.i(TAG, "usb obd received msg:" + message);
                     }
 
                     @Override
@@ -553,39 +553,23 @@ public class SocketManager {
         if (Config.TCP_CONTECT_WAY_WIFI.equals(type)) {
             if (mTCPWifiObdSocket != null) {
                 if (listener != null)
-                    listener.onError("不支持此端口请求");
+                    listener.onError("不支持OBD端口请求");
             } else {
                 if (listener != null)
-                    listener.onError("disconnect wifi tcp socket.");
+                    listener.onError("disconnect wifi obd tcp socket.");
             }
         } else if (Config.TCP_CONTECT_WAY_USB.equals(type)) {
             if (mTCPUsbObdSocket != null) {
-                mTCPUsbObdSocket.sendTcpData(message, new DataSendListener() {
-                    @Override
-                    public void onSuccess(final String message) {
-                        if (listener != null)
-                            listener.onSuccess(message);
-                        LogController.i(TAG, "usb json send sucess,thread:" + Thread.currentThread().getName());
-
-                    }
-
-                    @Override
-                    public void onError(final String error) {
-                        if (listener != null)
-                            listener.onError(error);
-                        LogController.i(TAG, "usb json send fail,thread:" + Thread.currentThread().getName());
-
-                    }
-                });
+                if (listener != null)
+                    listener.onError("不支持OBD端口请求");
             } else {
                 if (listener != null)
-                    listener.onError("disconnect usb tcp socket.");
+                    listener.onError("disconnect usb obd tcp socket.");
             }
         } else {
             if (listener != null)
-                listener.onError("disconnect wifi or usb tcp socket.");
+                listener.onError("disconnect wifi or usb obd tcp socket.");
         }
-
         LogController.i(TAG, "request data by json,thread:" + Thread.currentThread().getName());
     }
 
@@ -919,7 +903,6 @@ public class SocketManager {
 
 
     public void addDataReceivedListener(DataReceiveListener listener) {
-        mDataReceivedListenerList.clear();
         mDataReceivedListenerList.add(listener);
     }
 

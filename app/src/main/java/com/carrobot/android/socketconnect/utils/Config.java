@@ -21,7 +21,8 @@ public class Config {
      */
     public static final int TYPE_RECEIVE_UDP = 0;
     public static final int TYPE_RECEIVE_TCP =1;
-    public static final int TYPE_RECEIVE_OBD =1;
+    public static final int TYPE_RECEIVE_WIFI_OBD =2;
+    public static final int TYPE_RECEIVE_USB_OBD =3;
 
     /**
      * socket心跳包检测常量值
