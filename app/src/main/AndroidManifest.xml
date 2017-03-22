@@ -27,6 +27,7 @@
         </activity>
 
         <service android:name=".socket.TCPUsbSocket"/>
+        <service android:name=".socket.TCPUsbObdSocket"/>
 
 
     </application>

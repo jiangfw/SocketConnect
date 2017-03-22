@@ -38,9 +38,9 @@ import java.util.List;
  * Created by fuwei.jiang on 17/1/7.
  */
 
-public class TCPUsbSocket extends Service implements Runnable {
+public class TCPUsbObdSocket extends Service implements Runnable {
 
-    public static String TAG = TCPUsbSocket.class.getSimpleName();
+    public static String TAG = TCPUsbObdSocket.class.getSimpleName();
 
     private HeartBreakTimer heartBreakTimer;//心跳包计时器
     private long lastRecvTimeStamp = 0;//用于判断检测心跳包时间戳
@@ -102,13 +102,13 @@ public class TCPUsbSocket extends Service implements Runnable {
             if (serverSocket == null) {
                 serverSocket = new ServerSocket();
                 serverSocket.setReuseAddress(true);
-                serverSocket.bind(new InetSocketAddress(Config.TCP_SERVER_SOCKET_FACTORY_PORT));
+                serverSocket.bind(new InetSocketAddress(Config.TCP_SERVER_SOCKET_OBD_PORT));
             }
-            LogController.i(TAG, "startConn("+Config.TCP_SERVER_SOCKET_FACTORY_PORT+") 开始建立USB的TCP链接成功.");
+            LogController.i(TAG, "usb obd startConn("+Config.TCP_SERVER_SOCKET_OBD_PORT+") 开始建立USB的TCP链接成功.");
             return true;
         } catch (IOException e) {
             e.printStackTrace();
-            LogController.i(TAG, "startConn("+Config.TCP_SERVER_SOCKET_FACTORY_PORT+") 开始建立USB的TCP链接失败.");
+            LogController.i(TAG, "usb obd startConn("+Config.TCP_SERVER_SOCKET_OBD_PORT+") 开始建立USB的TCP链接失败.");
         }
         return false;
     }
@@ -141,7 +141,7 @@ public class TCPUsbSocket extends Service implements Runnable {
             }
         }
         mSocketLists.clear();
-        LogController.i(TAG, "stopConn() 关闭USB的tcp链接成功.");
+        LogController.i(TAG, "usb obd stopConn() 关闭USB的tcp链接成功.");
     }
 
 
@@ -152,7 +152,7 @@ public class TCPUsbSocket extends Service implements Runnable {
         if (receiveTcpUsbThread == null) {
             receiveTcpUsbThread = new Thread(this);
             receiveTcpUsbThread.start();
-            LogController.i(TAG, "startTCPUsbSocketThread() 线程启动成功.");
+            LogController.i(TAG, "usb obd startTCPUsbSocketThread() 线程启动成功.");
         }
     }
 
@@ -163,7 +163,7 @@ public class TCPUsbSocket extends Service implements Runnable {
         if (receiveTcpUsbThread != null)
             receiveTcpUsbThread.interrupt();
         receiveTcpUsbThread = null;
-        LogController.i(TAG, "stopTCPUsbSocketThread() 线程停止成功.");
+        LogController.i(TAG, "usb obd stopTCPUsbSocketThread() 线程停止成功.");
     }
 
 
@@ -190,12 +190,12 @@ public class TCPUsbSocket extends Service implements Runnable {
                 heartBreakTimer = new HeartBreakTimer();
                 heartBreakTimer.start(-1, Config.HEARTBREAK_TIME);
 
-                LogController.i(TAG, "accept tcp socket:" + socket);
+                LogController.i(TAG, "usb obd accept tcp socket:" + socket);
             }
         } catch (Exception e) {
             e.printStackTrace();
             notifySocketConnectFail(e.getMessage());
-            LogController.i(TAG, "e2:" + e.toString());
+            LogController.i(TAG, "usb obd e2:" + e.toString());
         } finally {
             stopConn();
         }
@@ -204,9 +204,9 @@ public class TCPUsbSocket extends Service implements Runnable {
 
     public class LocalBinder extends Binder {
 
-        TCPUsbSocket getService() {
+        TCPUsbObdSocket getService() {
 
-            return TCPUsbSocket.this;
+            return TCPUsbObdSocket.this;
 
         }
 
@@ -253,7 +253,7 @@ public class TCPUsbSocket extends Service implements Runnable {
                 }
             } catch (Exception e) {
                 e.printStackTrace();
-                LogController.i(TAG, "usb read ex:" + e.toString());
+                LogController.i(TAG, "usb obd  read ex:" + e.toString());
             }
 
         }
@@ -269,7 +269,7 @@ public class TCPUsbSocket extends Service implements Runnable {
 
             try {
                 String fileName = (file == null) ? "" : file.getName();
-                LogController.i(TAG, "usb read sucess, line:" + receiveMsg + "\n" + fileName);
+                LogController.i(TAG, "usb obd  read sucess, line:" + receiveMsg + "\n" + fileName);
                 JSONObject jsonObject = new JSONObject(receiveMsg);
                 String msg = jsonObject.optString("msg");
                 String data = jsonObject.optString("data");
@@ -284,7 +284,7 @@ public class TCPUsbSocket extends Service implements Runnable {
                             if (file != null)
                                 sofObject.put("len", file.length());
                             printWriter.println(sofObject.toString());
-                            LogController.i(TAG, "usb write file start msg:" + sofObject.toString());
+                            LogController.i(TAG, "usb obd  write file start msg:" + sofObject.toString());
                         } else if ("success".equalsIgnoreCase(data)) {
                             //ROM升级成功
                             onRomInstallSucess(mOnSocketFileListener);
@@ -429,11 +429,11 @@ public class TCPUsbSocket extends Service implements Runnable {
                     String filePath = (file == null) ? "" : file.getPath();
                     onSendError(listener, filePath);
                     isAllowRequestMsgByJson = true;
-                    LogController.i(TAG, "usb file ex:" + e.toString());
+                    LogController.i(TAG, "usb obd  file ex:" + e.toString());
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
-                LogController.i(TAG, "usb read json error:" + e.toString());
+                LogController.i(TAG, "usb obd  read json error:" + e.toString());
             }
 
         }
@@ -455,9 +455,9 @@ public class TCPUsbSocket extends Service implements Runnable {
      * @param listener
      */
     public void sendTcpFileData(final File file, final boolean isStart, final boolean isFinish, final DataSendListener listener) {
-        TCPUsbSocket.this.mTransferFile = file;
-        TCPUsbSocket.this.isFinishTransfer = isFinish;
-        TCPUsbSocket.this.mFileSendListener = listener;
+        TCPUsbObdSocket.this.mTransferFile = file;
+        TCPUsbObdSocket.this.isFinishTransfer = isFinish;
+        TCPUsbObdSocket.this.mFileSendListener = listener;
         isAllowRequestMsgByJson = false;
         //1.通知开始升级 {“msg”:”upgrade”, “data”:”start"}
         SocketThreadPool.getSocketThreadPool().post(new Runnable() {
@@ -500,17 +500,17 @@ public class TCPUsbSocket extends Service implements Runnable {
             @Override
             public void run() {
                 if (!isAllowRequestMsgByJson) {
-                    onSendError(listener, "usb file transfering...");
-                    LogController.i(TAG, "usb file transfering:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
+                    onSendError(listener, "usb obd  file transfering...");
+                    LogController.i(TAG, "usb obd  file transfering:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
                     return;
                 }
 
                 if (mSocketLists == null || mSocketLists.size() == 0) {
-                    onSendError(listener, "disconnect usb tcp socket.");
+                    onSendError(listener, "disconnect usb obd  tcp socket.");
                     return;
                 }
 
-                LogController.d(TAG, "usb send tcp data socketSize:" + mSocketLists.size());
+                LogController.d(TAG, "usb obd  send tcp data socketSize:" + mSocketLists.size());
                 for (Socket socket : mSocketLists) {
                     PrintWriter pw = null;
                     if (socket != null) {
@@ -519,12 +519,12 @@ public class TCPUsbSocket extends Service implements Runnable {
                             pw.println(json);
                             pw.flush();
                             onSendSucess(listener, json);
-                            LogController.i(TAG, "usb send to sucess msg:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
+                            LogController.i(TAG, "usb obd  send to sucess msg:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
                         } catch (Exception e) {
                             e.printStackTrace();
                             onSendError(listener, e.getMessage());
                             mSocketLists.remove(socket);
-                            LogController.i(TAG, "usb send to sucess msg:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
+                            LogController.i(TAG, "usb obd  send to sucess msg:" + json.toString() + ",threadName:" + Thread.currentThread().getName());
                         }
                     }
                 }

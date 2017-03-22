@@ -38,7 +38,9 @@ public class SocketManager {
     // 无线wifi方式socket通信，使用socket实现收发
     private UDPSocket mUDPSocket;
     private TCPWifiSocket mTCPClient;
-    private Thread mUDPReceiveThread;
+    // 无线wifi的OBD的socket的通信，仅接受obd传回的数据，不支持发送
+    private  TCPWifiObdSocket mTCPWifiObdSocket = null;
+
     private Thread mUDPSendThread;
     private boolean isStartUDPBroadcast = true;
 
@@ -46,11 +48,11 @@ public class SocketManager {
     private TCPUsbSocket mTCPUsbSocket = null;
     private MyServiceConnection myServiceConnection;
 
+    private TCPUsbObdSocket mTCPUsbObdSocket = null;
+    private MyServiceConnection myObdSeviceConnection;
+
     // 存储当前有效的连接方式
     private HashSet<String> mConnTypeSet = new HashSet<>();
-
-    // 设置当前默认使用的TCP端口号
-    private String mPortType = Config.TCP_PORT_FACTORY;
 
     // socket连接监听
     private List<onSocketStatusListener> mListenerList = new ArrayList<>();
@@ -69,17 +71,18 @@ public class SocketManager {
     private Hashtable<File, Boolean> mHt_FileStatus = new Hashtable<>();
     //end 文件传输使用的变量 end
 
-    private SocketManager(Context context) {
-        this.mContext = context.getApplicationContext();
+    private SocketManager() {
     }
 
-    public static SocketManager getInstance(Context context) {
+    public static SocketManager getInstance() {
         if (instance == null) {
-            if (context != null) {
-                instance = new SocketManager(context);
-            }
+            instance = new SocketManager();
         }
         return instance;
+    }
+
+    public void init(Context context){
+        this.mContext = context;
     }
 
     /**
@@ -141,8 +144,24 @@ public class SocketManager {
                         mTCPClient.setSocketFileListerner(new SocketFileStatusListener(Config.TCP_CONTECT_WAY_WIFI));
                         mTCPClient.connectTcpWifiSocket(ip, factoryPort);
                     }
+                    if (mTCPWifiObdSocket == null) {
+                        mTCPWifiObdSocket = new TCPWifiObdSocket();
+                        mTCPWifiObdSocket.addDataReceivedListener(new DataReceiveListener() {
+                            @Override
+                            public void onMessageReceived(int type, final String message) {
+                                notifyMessageReceived(Config.TYPE_RECEIVE_OBD, message);
+                                LogController.i(TAG, "wifi obd received msg:" + message);
+                            }
+
+                            @Override
+                            public void onCommandReceived(int command) {
+
+                            }
+                        });
+                        mTCPWifiObdSocket.connectTcpWifiSocket(ip, OBDPort);
+                    }
                     //停止UDP的广播请求
-                    isStartUDPBroadcast = false;
+                    stopUdpSocketConnection();
                     LogController.i(TAG, "udp accept server message:" + message);
                 }
             }
@@ -171,8 +190,13 @@ public class SocketManager {
     private void startUsbSocketConnection() {
 
         //建立有线连接的服务,启动service解决端口重新绑定的问题
-        myServiceConnection = new MyServiceConnection();
+        myServiceConnection = new MyServiceConnection(Config.TCP_PORT_FACTORY);
         mContext.bindService(new Intent(mContext, TCPUsbSocket.class), myServiceConnection, Context.BIND_AUTO_CREATE);
+
+
+        myObdSeviceConnection = new MyServiceConnection(Config.TCP_PORT_OBD);
+        mContext.bindService(new Intent(mContext, TCPUsbObdSocket.class), myObdSeviceConnection, Context.BIND_AUTO_CREATE);
+
 
     }
 
@@ -353,6 +377,12 @@ public class SocketManager {
      * 有线连接使用service进行绑定
      */
     private class MyServiceConnection implements ServiceConnection {
+
+        private int type;
+
+        public MyServiceConnection(int type){
+            this.type = type;
+        }
         /**
          * @param name
          * @param service
@@ -360,26 +390,46 @@ public class SocketManager {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
 
-            TCPUsbSocket.LocalBinder binder = (TCPUsbSocket.LocalBinder) service;
+            if(type == Config.TCP_PORT_FACTORY){
+                TCPUsbSocket.LocalBinder binder = (TCPUsbSocket.LocalBinder) service;
 
-            TCPUsbSocket serverService = (TCPUsbSocket) binder.getService();
-            mTCPUsbSocket = serverService;
+                TCPUsbSocket serverService = (TCPUsbSocket) binder.getService();
+                mTCPUsbSocket = serverService;
 
-            serverService.addSocketConnStatusListener(new UsbSocketConnListener(Config.TCP_SERVER_SOCKET_PORT));
-            serverService.setSocketFileListerner(new SocketFileStatusListener(Config.TCP_CONTECT_WAY_USB));
-            serverService.addDataReceivedListener(new DataReceiveListener() {
-                @Override
-                public void onMessageReceived(int type, String message) {
-                    notifyMessageReceived(type, message);
-                    LogController.i(TAG, "usb received msg:" + message);
-                }
+                serverService.addSocketConnStatusListener(new UsbSocketConnListener(Config.TCP_SERVER_SOCKET_FACTORY_PORT));
+                serverService.setSocketFileListerner(new SocketFileStatusListener(Config.TCP_CONTECT_WAY_USB));
+                serverService.addDataReceivedListener(new DataReceiveListener() {
+                    @Override
+                    public void onMessageReceived(int type, String message) {
+                        notifyMessageReceived(type, message);
+                        LogController.i(TAG, "usb received msg:" + message);
+                    }
 
-                @Override
-                public void onCommandReceived(int command) {
+                    @Override
+                    public void onCommandReceived(int command) {
 
-                }
-            });
-            serverService.connectTcpUsbSocket();
+                    }
+                });
+                serverService.connectTcpUsbSocket();
+            }else if(type == Config.TCP_PORT_OBD){
+                TCPUsbObdSocket.LocalBinder binder = (TCPUsbObdSocket.LocalBinder) service;
+
+                TCPUsbObdSocket serverService = (TCPUsbObdSocket) binder.getService();
+                mTCPUsbObdSocket = serverService;
+                serverService.addDataReceivedListener(new DataReceiveListener() {
+                    @Override
+                    public void onMessageReceived(int type, String message) {
+                        notifyMessageReceived(type, message);
+                        LogController.i(TAG, "usb received msg:" + message);
+                    }
+
+                    @Override
+                    public void onCommandReceived(int command) {
+
+                    }
+                });
+                serverService.connectTcpUsbSocket();
+            }
         }
 
         @Override
@@ -464,6 +514,53 @@ public class SocketManager {
         } else if (Config.TCP_CONTECT_WAY_USB.equals(type)) {
             if (mTCPUsbSocket != null) {
                 mTCPUsbSocket.sendTcpData(message, new DataSendListener() {
+                    @Override
+                    public void onSuccess(final String message) {
+                        if (listener != null)
+                            listener.onSuccess(message);
+                        LogController.i(TAG, "usb json send sucess,thread:" + Thread.currentThread().getName());
+
+                    }
+
+                    @Override
+                    public void onError(final String error) {
+                        if (listener != null)
+                            listener.onError(error);
+                        LogController.i(TAG, "usb json send fail,thread:" + Thread.currentThread().getName());
+
+                    }
+                });
+            } else {
+                if (listener != null)
+                    listener.onError("disconnect usb tcp socket.");
+            }
+        } else {
+            if (listener != null)
+                listener.onError("disconnect wifi or usb tcp socket.");
+        }
+
+        LogController.i(TAG, "request data by json,thread:" + Thread.currentThread().getName());
+    }
+    /**
+     * 请求文本数据
+     *
+     * @param message json格式
+     * @param type    有线还是无线连接方式
+     * @return true 请求成功 false 请求失败
+     */
+    public void requestObdByJson(final String message, final String type, final DataSendListener listener) {
+
+        if (Config.TCP_CONTECT_WAY_WIFI.equals(type)) {
+            if (mTCPWifiObdSocket != null) {
+                if (listener != null)
+                    listener.onError("不支持此端口请求");
+            } else {
+                if (listener != null)
+                    listener.onError("disconnect wifi tcp socket.");
+            }
+        } else if (Config.TCP_CONTECT_WAY_USB.equals(type)) {
+            if (mTCPUsbObdSocket != null) {
+                mTCPUsbObdSocket.sendTcpData(message, new DataSendListener() {
                     @Override
                     public void onSuccess(final String message) {
                         if (listener != null)
@@ -718,6 +815,7 @@ public class SocketManager {
         destoryFile();
         stopWifiSocketConnection();
         stopUsbSocketConnection();
+        stopWifiObdSocketConnection();
     }
 
     /**
@@ -731,31 +829,42 @@ public class SocketManager {
     }
 
     /**
-     * 销毁无线socket连接
+     * 销毁无线udp的socket连接
      */
-    private void stopWifiSocketConnection() {
-        if (mUDPSocket != null) {
-            isStartUDPBroadcast = false;
-            mUDPSocket.disconnectUDPSocket();
-            mUDPSocket = null;
-        }
+    private void stopUdpSocketConnection(){
 
-        if (mUDPReceiveThread != null) {
-            mUDPReceiveThread.interrupt();
-            mUDPReceiveThread = null;
-
-        }
         if (mUDPSendThread != null) {
+            isStartUDPBroadcast = false;
             mUDPSendThread.interrupt();
             mUDPSendThread = null;
         }
 
+        if (mUDPSocket != null) {
+            mUDPSocket.disconnectUDPSocket();
+            mUDPSocket = null;
+        }
+    }
+
+    /**
+     * 销毁无线tcp的socket连接
+     */
+    private void stopWifiSocketConnection() {
+        stopUdpSocketConnection();
         if (mTCPClient != null) {
             mTCPClient.disconnectTcpWifiSocket();
             mTCPClient = null;
         }
     }
 
+    /**
+     * 销毁无线tcp的socket连接
+     */
+    private void stopWifiObdSocketConnection() {
+        if (mTCPWifiObdSocket != null) {
+            mTCPWifiObdSocket.disconnectTcpWifiSocket();
+            mTCPWifiObdSocket = null;
+        }
+    }
     /**
      * 销毁有线socket连接
      */
@@ -765,15 +874,11 @@ public class SocketManager {
             mContext.unbindService(myServiceConnection);
             mTCPUsbSocket = null;
         }
-    }
-
-    /**
-     * 设置监听端口
-     *
-     * @param type
-     */
-    public void setPortType(String type) {
-        this.mPortType = type;
+        if (mTCPUsbObdSocket != null) {
+            mTCPUsbObdSocket.disconnectTcpUsbSocket();
+            mContext.unbindService(myObdSeviceConnection);
+            mTCPUsbObdSocket = null;
+        }
     }
 
     /**

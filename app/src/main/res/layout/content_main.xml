@@ -32,7 +32,7 @@
             android:layout_height="wrap_content"
             android:layout_margin="2dp"
             android:layout_weight="1"
-            android:text="发送无线数据" />
+            android:text="发送工模无线数据" />
 
         <Button
             android:id="@+id/id_btn_send_wired"
@@ -41,7 +41,31 @@
             android:layout_below="@+id/id_tv_info"
             android:layout_margin="2dp"
             android:layout_weight="1"
-            android:text="发送有线数据" />
+            android:text="发送工模有线数据" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/id_ll_send_obd"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/id_ll_send">
+
+        <Button
+            android:id="@+id/id_btn_send_obd_wireless"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="2dp"
+            android:layout_weight="1"
+            android:text="发送OBD无线数据" />
+
+        <Button
+            android:id="@+id/id_btn_send_obd_wired"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/id_tv_info"
+            android:layout_margin="2dp"
+            android:layout_weight="1"
+            android:text="发送OBD有线数据" />
     </LinearLayout>
 
 
@@ -49,16 +73,16 @@
         android:id="@+id/id_ll_file"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@+id/id_ll_send">
+        android:layout_below="@+id/id_ll_send_obd">
 
         <Button
 
             android:id="@+id/id_btn_get_version"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1.0"
             android:layout_below="@+id/id_ll_send"
             android:layout_margin="2dp"
+            android:layout_weight="1.0"
             android:text="获取版本号" />
 
 
@@ -74,18 +98,27 @@
 
     <Button
         android:id="@+id/id_btn_miracast"
-        android:layout_below="@+id/id_ll_file"
-        android:text="开启无线投屏"
-        android:layout_margin="2dp"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/id_ll_file"
+        android:layout_margin="2dp"
+        android:text="开启无线投屏" />
+
+    <Button
+        android:id="@+id/id_btn_test"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/id_btn_miracast"
+        android:layout_margin="2dp"
+        android:text="测试"
+        android:visibility="gone" />
 
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_alignParentBottom="true"
-        android:layout_below="@+id/id_btn_miracast">
+        android:layout_below="@+id/id_btn_test">
 
         <TextView
             android:id="@+id/id_tv_recevie"

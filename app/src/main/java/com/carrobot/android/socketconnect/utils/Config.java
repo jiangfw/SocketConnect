@@ -21,6 +21,7 @@ public class Config {
      */
     public static final int TYPE_RECEIVE_UDP = 0;
     public static final int TYPE_RECEIVE_TCP =1;
+    public static final int TYPE_RECEIVE_OBD =1;
 
     /**
      * socket心跳包检测常量值
@@ -37,13 +38,14 @@ public class Config {
     /**
      * 端口类型 工模or OBD
      */
-    public static  final String TCP_PORT_OBD = "tcp_port_obd";
-    public static  final String TCP_PORT_FACTORY = "tcp_port_factory";
+    public static  final int TCP_PORT_OBD = 0;
+    public static  final int TCP_PORT_FACTORY = 1;
 
     /**
      * usb方式连接的监听接口
      */
-    public static final int TCP_SERVER_SOCKET_PORT = 9100;
+    public static final int TCP_SERVER_SOCKET_FACTORY_PORT = 9100;
+    public static final int TCP_SERVER_SOCKET_OBD_PORT = 9101;
 
 
     /**
