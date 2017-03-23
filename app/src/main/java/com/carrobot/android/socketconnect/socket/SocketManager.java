@@ -158,6 +158,27 @@ public class SocketManager {
 
                             }
                         });
+                        mTCPWifiObdSocket.addSocketConnStatusListener(new onSocketStatusListener() {
+                            @Override
+                            public void onSocketUdpInfo(String message) {
+
+                            }
+
+                            @Override
+                            public void onSocketConnectSucess(String connWay) {
+
+                            }
+
+                            @Override
+                            public void onSocketConnectFail(String message) {
+                                stopWifiObdSocketConnection();
+                            }
+
+                            @Override
+                            public void onSocketConnectLost(String connWay) {
+
+                            }
+                        });
                         mTCPWifiObdSocket.connectTcpWifiSocket(ip, OBDPort);
                     }
                     //停止UDP的广播请求
@@ -193,11 +214,8 @@ public class SocketManager {
         myServiceConnection = new MyServiceConnection(Config.TCP_PORT_FACTORY);
         mContext.bindService(new Intent(mContext, TCPUsbSocket.class), myServiceConnection, Context.BIND_AUTO_CREATE);
 
-
         myObdSeviceConnection = new MyServiceConnection(Config.TCP_PORT_OBD);
         mContext.bindService(new Intent(mContext, TCPUsbObdSocket.class), myObdSeviceConnection, Context.BIND_AUTO_CREATE);
-
-
     }
 
     /**
@@ -794,6 +812,8 @@ public class SocketManager {
      */
     public void stopSocketConnection() {
         mConnTypeSet.clear();
+        mDataReceivedListenerList.clear();
+        mListenerList.clear();
         isUSBConn = false;
         isWIFIConn = false;
         destoryFile();

@@ -6,6 +6,7 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.util.Base64;
 
 import com.carrobot.android.socketconnect.listener.DataReceiveListener;
@@ -111,6 +112,8 @@ public class TCPUsbObdSocket extends Service implements Runnable {
      * 关闭socket链接
      */
     public void stopConn() {
+        mDataReceiveListenerList.clear();
+        mListenerList.clear();
         //断开serversocket链接
         if (serverSocket != null) {
             if (!serverSocket.isClosed()) {
@@ -236,7 +239,8 @@ public class TCPUsbObdSocket extends Service implements Runnable {
                 String line = null;
                 while ((line = this.bufferedReader.readLine()) != null) {
                     // 处理返回的消息
-                    notifyMessageReceived(line);
+                    if (!TextUtils.isEmpty(line))
+                        notifyMessageReceived(line);
                 }
             } catch (Exception e) {
                 e.printStackTrace();

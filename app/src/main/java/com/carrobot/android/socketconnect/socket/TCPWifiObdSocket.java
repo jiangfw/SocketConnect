@@ -2,6 +2,7 @@ package com.carrobot.android.socketconnect.socket;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 
 import com.carrobot.android.socketconnect.listener.DataReceiveListener;
 import com.carrobot.android.socketconnect.listener.onSocketStatusListener;
@@ -140,6 +141,8 @@ public class TCPWifiObdSocket implements Runnable {
     private void stopConn() {
 
         try {
+            mDataReceiveListenerList.clear();
+            mListenerList.clear();
             if (mSocket != null && !mSocket.isClosed())
                 mSocket.close();
             if (inputStream != null)
@@ -168,7 +171,8 @@ public class TCPWifiObdSocket implements Runnable {
             String line = "";
             while ((line = bufferedReader.readLine()) != null) {
                 // 处理返回的消息
-                notifyDataReceived(line);
+                if (!TextUtils.isEmpty(line))
+                    notifyDataReceived(line);
             }
         } catch (Exception e) {
             e.printStackTrace();
