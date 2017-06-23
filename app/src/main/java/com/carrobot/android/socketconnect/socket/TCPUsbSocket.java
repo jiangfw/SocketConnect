@@ -116,7 +116,7 @@ public class TCPUsbSocket extends Service implements Runnable {
     /**
      * 关闭socket链接
      */
-    public void stopConn() {
+    private void stopConn() {
         //断开serversocket链接
         if (serverSocket != null) {
             if (!serverSocket.isClosed()) {
