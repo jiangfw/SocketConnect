@@ -648,6 +648,11 @@ public class SocketManager {
                     return false;
                 }
                 return true;
+            }else{
+                if (mOnSocketFileListener != null) {
+                    mOnSocketFileListener.onFileTransferFail("", "file not exist.");
+                }
+                return false;
             }
         } else {
             mHt_FileStatus.clear();

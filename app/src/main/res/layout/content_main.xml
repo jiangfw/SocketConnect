@@ -17,7 +17,7 @@
         android:id="@+id/id_tv_info"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="udp 广播获取服务端IP地址中..." />
+        android:text="udp broadcast ip and port..." />
 
 
     <LinearLayout
@@ -32,7 +32,7 @@
             android:layout_height="wrap_content"
             android:layout_margin="2dp"
             android:layout_weight="1"
-            android:text="发送工模无线数据" />
+            android:text="GET WIRELESS DATA" />
 
         <Button
             android:id="@+id/id_btn_send_wired"
@@ -41,7 +41,7 @@
             android:layout_below="@+id/id_tv_info"
             android:layout_margin="2dp"
             android:layout_weight="1"
-            android:text="发送工模有线数据" />
+            android:text="GET USB DATA" />
     </LinearLayout>
 
     <LinearLayout
@@ -56,7 +56,7 @@
             android:layout_height="wrap_content"
             android:layout_margin="2dp"
             android:layout_weight="1"
-            android:text="发送OBD无线数据" />
+            android:text="SEND WIRELESS OBD" />
 
         <Button
             android:id="@+id/id_btn_send_obd_wired"
@@ -65,7 +65,7 @@
             android:layout_below="@+id/id_tv_info"
             android:layout_margin="2dp"
             android:layout_weight="1"
-            android:text="发送OBD有线数据" />
+            android:text="SEND USB OBD" />
     </LinearLayout>
 
 
@@ -83,7 +83,7 @@
             android:layout_below="@+id/id_ll_send"
             android:layout_margin="2dp"
             android:layout_weight="1.0"
-            android:text="获取版本号" />
+            android:text="GET VERSION" />
 
 
         <Button
@@ -92,7 +92,7 @@
             android:layout_height="wrap_content"
             android:layout_margin="2dp"
             android:layout_weight="1"
-            android:text="发送文件数据" />
+            android:text="TRANSFER FILE" />
     </LinearLayout>
 
 
@@ -102,7 +102,7 @@
         android:layout_height="wrap_content"
         android:layout_below="@+id/id_ll_file"
         android:layout_margin="2dp"
-        android:text="开启无线投屏" />
+        android:text="WIFI CAST" />
 
     <Button
         android:id="@+id/id_btn_test"
@@ -124,7 +124,7 @@
             android:id="@+id/id_tv_recevie"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:text="建立TCP连接中..." />
+            android:text="Tcp Connecting..." />
 
     </ScrollView>
 

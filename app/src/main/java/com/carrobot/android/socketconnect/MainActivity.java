@@ -274,7 +274,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
             int factoryPort = jsonObject.optInt("factoryPort");
             int OBDPort = jsonObject.optInt("OBDPort");
 
-            id_tv_info.setText("服务端IP地址:" + ip + "  工模端口:" + factoryPort + " OBD端口:" + OBDPort);
+            id_tv_info.setText("IP Address:" + ip + "\nFactory Port:" + factoryPort + "\nOBD Port:" + OBDPort);
 
         } catch (JSONException e) {
             e.printStackTrace();
@@ -287,7 +287,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
     @Override
     public void onSocketConnectSucess(String connWay) {
         Toast.makeText(this, connWay, Toast.LENGTH_SHORT).show();
-        id_tv_recevie.setText("建立TCP连接成功..." + "\n");
+        id_tv_recevie.setText("Tcp Connect Sucess..." + "\n");
 
     }
 
@@ -297,7 +297,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
     @Override
     public void onSocketConnectFail(String message) {
         Toast.makeText(this, "onSocketConnectFail msg:" + message, Toast.LENGTH_SHORT).show();
-        id_tv_recevie.setText("建立TCP连接中..." + message + "\n");
+        id_tv_recevie.setText("Tcp Connecting..." + message + "\n");
     }
 
     /**
@@ -307,7 +307,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
     public void onSocketConnectLost(String connWay) {
 
         Toast.makeText(this, "onSocketConnectLost:" + connWay, Toast.LENGTH_SHORT).show();
-        id_tv_recevie.setText("建立TCP连接中..." + "\n");
+        id_tv_recevie.setText("Tcp Connecting..." + "\n");
     }
 
 
