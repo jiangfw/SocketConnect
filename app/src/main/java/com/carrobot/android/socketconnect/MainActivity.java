@@ -96,14 +96,14 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
             }
         });
-        Button id_btn_send_obd_wireless = (Button) findViewById(R.id.id_btn_send_obd_wireless);
+        Button id_btn_get_speed_unit = (Button) findViewById(R.id.id_btn_get_speed_unit);
 
-        id_btn_send_obd_wireless.setOnClickListener(new View.OnClickListener() {
+        id_btn_get_speed_unit.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
 
-                String msg = "{\"msg\":\"wifi\"}";
-                mSocketManager.requestObdByJson(msg, Config.TCP_CONTECT_WAY_WIFI, new DataSendListener() {
+                String msg = "{\"msg\":\"getspeedunit\"}";
+                SocketManager.getInstance().requestDataByJson(msg, new DataSendListener() {
                     @Override
                     public void onSuccess(String message) {
 
@@ -111,20 +111,19 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
                     @Override
                     public void onError(String error) {
-                        Toast.makeText(MainActivity.this, "wifi obd error:" + error, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this,"set speed mph fail.",Toast.LENGTH_SHORT).show();
                     }
                 });
             }
         });
 
-        Button id_btn_send_obd_wired = (Button) findViewById(R.id.id_btn_send_obd_wired);
-
-        id_btn_send_obd_wired.setOnClickListener(new View.OnClickListener() {
+        Button id_btn_set_mph = (Button) findViewById(R.id.id_btn_set_mph);
+        id_btn_set_mph.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
 
-                String msg = "{\"msg\":\"usb\"}";
-                mSocketManager.requestObdByJson(msg, Config.TCP_CONTECT_WAY_USB, new DataSendListener() {
+                String msg = "{\"msg\":\"setspeedunit\",\"data\":\"mph\"}";
+                SocketManager.getInstance().requestDataByJson(msg, new DataSendListener() {
                     @Override
                     public void onSuccess(String message) {
 
@@ -132,10 +131,29 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
                     @Override
                     public void onError(String error) {
-                        Toast.makeText(MainActivity.this, "usb obd error:" + error, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this,"set speed mph fail.",Toast.LENGTH_SHORT).show();
                     }
                 });
+            }
+        });
 
+        Button id_btn_set_kmh = (Button) findViewById(R.id.id_btn_set_kmh);
+        id_btn_set_kmh.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+
+                String msg = "{\"msg\":\"setspeedunit\",\"data\":\"kmh\"}";
+                SocketManager.getInstance().requestDataByJson(msg, new DataSendListener() {
+                    @Override
+                    public void onSuccess(String message) {
+
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        Toast.makeText(MainActivity.this,"set speed kmh fail.",Toast.LENGTH_SHORT).show();
+                    }
+                });
             }
         });
 
