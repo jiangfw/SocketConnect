@@ -83,11 +83,9 @@
         android:layout_below="@+id/id_ll_send_obd">
 
         <Button
-
             android:id="@+id/id_btn_get_version"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_below="@+id/id_ll_send"
             android:layout_margin="2dp"
             android:layout_weight="1.0"
             android:text="GET VERSION" />
@@ -103,11 +101,35 @@
     </LinearLayout>
 
 
+    <LinearLayout
+        android:id="@+id/id_ll_bright"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/id_ll_file">
+
+        <Button
+            android:id="@+id/id_btn_get_bright"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="2dp"
+            android:layout_weight="1.0"
+            android:text="GET BRIGHT" />
+
+
+        <Button
+            android:id="@+id/id_btn_set_bright"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="2dp"
+            android:layout_weight="1"
+            android:text="SET BRIGHT" />
+    </LinearLayout>
+
     <Button
         android:id="@+id/id_btn_miracast"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@+id/id_ll_file"
+        android:layout_below="@+id/id_ll_bright"
         android:layout_margin="2dp"
         android:text="WIFI CAST" />
 

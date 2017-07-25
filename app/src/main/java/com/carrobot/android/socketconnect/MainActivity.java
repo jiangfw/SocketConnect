@@ -42,6 +42,8 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
     private SocketManager mSocketManager;
 
+    private int mCurrentBrightLevel;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -111,7 +113,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
                     @Override
                     public void onError(String error) {
-                        Toast.makeText(MainActivity.this,"set speed mph fail.",Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "set speed mph fail.", Toast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -131,7 +133,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
                     @Override
                     public void onError(String error) {
-                        Toast.makeText(MainActivity.this,"set speed mph fail.",Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "set speed mph fail.", Toast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -151,7 +153,7 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
 
                     @Override
                     public void onError(String error) {
-                        Toast.makeText(MainActivity.this,"set speed kmh fail.",Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "set speed kmh fail.", Toast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -226,6 +228,60 @@ public class MainActivity extends AppCompatActivity implements onSocketStatusLis
             }
         });
 
+//        set bright level
+//        request {“msg”:”getbrightlevel”}
+//        response {“msg”:” getbrightlevel”, “data”:”0”} // data:0, 1, 2，3，4，5
+//        instruction：0~5分别对应亮度一～亮度六
+        Button id_btn_get_bright = (Button) findViewById(R.id.id_btn_get_bright);
+        id_btn_get_bright.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String msg = "{\"msg\":\"getbrightlevel\"}";
+                mSocketManager.requestDataByJson(msg, new DataSendListener() {
+                    @Override
+                    public void onSuccess(String message) {
+
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        Toast.makeText(MainActivity.this, "error:" + error, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
+
+//        set bright level
+//        request {“msg”:” setbrightlevel”, “data”:2} // data:0, 1, 2，3，4，5
+//        response {“msg”:” setbrightlevel”, “data”:”ok/error”,“value”:2}// value:0, 1, 2，3，4，5，
+//        instruction：0~5,分别对应亮度一～亮度六
+        Button id_btn_set_bright = (Button) findViewById(R.id.id_btn_set_bright);
+        id_btn_set_bright.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mCurrentBrightLevel++;
+                if (mCurrentBrightLevel > 5)
+                    mCurrentBrightLevel = 0;
+                JSONObject jsonObject = new JSONObject();
+                try {
+                    jsonObject.put("msg", "setbrightlevel");
+                    jsonObject.put("data", mCurrentBrightLevel);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                mSocketManager.requestDataByJson(jsonObject.toString(), new DataSendListener() {
+                    @Override
+                    public void onSuccess(String message) {
+
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        Toast.makeText(MainActivity.this, "error:" + error, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
     }
 
     /**
