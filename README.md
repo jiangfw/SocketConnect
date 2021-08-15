@@ -18,4 +18,4 @@ glassSysService主要抽象公用的系统服务，主要包括蓝牙电话、�
 
 
 ## 框架图:
-![Image text](./AR眼镜项目结构.png)
+![Image text](https://github.com/jiangfw/SocketConnect/blob/master/AR%E7%9C%BC%E9%95%9C%E9%A1%B9%E7%9B%AE%E7%BB%93%E6%9E%84.png)
